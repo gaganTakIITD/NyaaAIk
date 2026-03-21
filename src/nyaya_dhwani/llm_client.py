@@ -1,10 +1,14 @@
 """OpenAI-compatible chat completions for Databricks Playground / serving endpoints.
 
-Typical env (from Playground **Get code** — do not commit secrets)::
+Typical env (from Playground **Get code** — do not commit secrets).
 
-    LLM_OPENAI_BASE_URL=https://.../serving-endpoints/<endpoint>/...   # or use LLM_CHAT_COMPLETIONS_URL
-    LLM_MODEL=databricks-meta-llama-3-1-8b-instruct
-    DATABRICKS_TOKEN=dapi...   # or LLM_API_KEY
+**AI Gateway** (OpenAI SDK ``base_url`` often ends with ``/mlflow/v1``)::
+
+    LLM_OPENAI_BASE_URL=https://<workspace-id>.ai-gateway.cloud.databricks.com/mlflow/v1
+    LLM_MODEL=databricks-llama-4-maverick
+    DATABRICKS_TOKEN=dapi...
+
+We POST to ``{LLM_OPENAI_BASE_URL}/chat/completions`` (same as the OpenAI client).
 
 See ``docs/PLAYGROUND_TO_APP.md``.
 """
@@ -26,11 +30,13 @@ def _chat_url() -> str:
     base = os.environ.get("LLM_OPENAI_BASE_URL", "").strip().rstrip("/")
     if not base:
         raise RuntimeError(
-            "Set LLM_CHAT_COMPLETIONS_URL (full POST URL) or LLM_OPENAI_BASE_URL (OpenAI-style base; "
-            "/v1/chat/completions is appended when missing)."
+            "Set LLM_CHAT_COMPLETIONS_URL (full POST URL) or LLM_OPENAI_BASE_URL "
+            "(e.g. AI Gateway …/mlflow/v1 from Playground Get code)."
         )
     if base.endswith("/chat/completions"):
         return base
+    # OpenAI SDK + AI Gateway Get code: base_url ends with …/mlflow/v1 (also ends with /v1).
+    # OpenAI.com: …/v1  →  …/v1/chat/completions
     if base.endswith("/v1"):
         return f"{base}/chat/completions"
     return f"{base}/v1/chat/completions"
@@ -88,3 +94,41 @@ def rag_user_message(context_chunks: list[str], question: str) -> str:
     """Single user message with retrieved context (Playground-style)."""
     ctx = "\n\n".join(c.strip() for c in context_chunks if c and str(c).strip())
     return f"Context:\n{ctx}\n\nQuestion: {question}"
+
+
+def complete_with_openai_sdk(
+    messages: list[dict[str, str]],
+    *,
+    model: str | None = None,
+    temperature: float = 0.2,
+    max_tokens: int = 4096,
+) -> str:
+    """Same HTTP contract as Playground **Get code** using the official ``openai`` package.
+
+    Requires ``pip install openai`` (optional extra ``llm_openai`` in pyproject).
+
+    Uses ``LLM_OPENAI_BASE_URL`` (no trailing slash), ``DATABRICKS_TOKEN`` / ``LLM_API_KEY``, ``LLM_MODEL``.
+    """
+    try:
+        from openai import OpenAI
+    except ImportError as e:
+        raise ImportError("Install openai: pip install 'nyaya-dhwani[llm_openai]' or pip install openai") from e
+
+    base = os.environ.get("LLM_OPENAI_BASE_URL", "").strip().rstrip("/")
+    if not base:
+        raise RuntimeError("Set LLM_OPENAI_BASE_URL to the Get code base_url (e.g. …/mlflow/v1).")
+    token = _bearer()
+    if not token:
+        raise RuntimeError("Set DATABRICKS_TOKEN, LLM_API_KEY, or OPENAI_API_KEY.")
+    model = (model or os.environ.get("LLM_MODEL", "")).strip()
+    if not model:
+        raise RuntimeError("Set LLM_MODEL (or pass model=).")
+
+    client = OpenAI(api_key=token, base_url=base)
+    resp = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    return (resp.choices[0].message.content or "").strip()

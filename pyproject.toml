@@ -24,6 +24,10 @@ rag = [
 rag_embed = [
   "sentence-transformers>=2.2.0",
 ]
+# Playground Get code parity (OpenAI SDK + Databricks AI Gateway base_url …/mlflow/v1).
+llm_openai = [
+  "openai>=1.30.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
