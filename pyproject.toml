@@ -14,7 +14,8 @@ dev = [
 ]
 # Core vector index (tests + retrieval); sentence-transformers is separate (heavy).
 rag = [
-  "numpy>=1.24",
+  # faiss-cpu 1.8+ imports numpy._core (NumPy 2.x); NumPy 1.x raises ModuleNotFoundError
+  "numpy>=2.0,<3",
   "faiss-cpu>=1.8.0",
   "pyarrow>=14.0.0",
 ]
