@@ -15,7 +15,9 @@ This document is the **canonical plan**; keep it in sync with development.
 | **Notebook fixes** | Sarvam cell syntax (`else` block), safe JSON error handling, corpus prefers `english_summary` for BNS rows |
 | **Package** | [`text_utils`](../src/nyaya_dhwani/text_utils.py), [`manifest`](../src/nyaya_dhwani/manifest.py), [`embedder`](../src/nyaya_dhwani/embedder.py), [`index_builder`](../src/nyaya_dhwani/index_builder.py), [`retrieval`](../src/nyaya_dhwani/retrieval.py), [`sarvam_client`](../src/nyaya_dhwani/sarvam_client.py) |
 | **RAG index** | [`notebooks/build_rag_index.ipynb`](../notebooks/build_rag_index.ipynb) writes FAISS + Parquet + `manifest.json` under `/Volumes/main/india_legal/legal_files/nyaya_index/` |
+| **RAG smoke test** | `CorpusIndex.load` + `search` works in notebook when index + deps are installed |
 | **App UI** | Not built — no `app/main.py` yet |
+| **MLflow / AI Gateway** | Not wired — optional for tracing, LLM routing, and packaging (see §8) |
 
 ---
 
@@ -119,7 +121,9 @@ The notebook already materializes **`main.india_legal.legal_rag_corpus`** with c
 
 | Phase | Scope |
 |-------|--------|
-| **MVP** | File upload for audio (or text bypass); English RAG + summary; Kannada text + downloadable audio |
+| **MVP** | Text-in English query → retrieve → LLM answer (no audio). Optional **MLflow** trace. |
+| **MVP+** | **Databricks App** (FastAPI/Gradio) or notebook-only UI; secrets for LLM; optional **AI Gateway** for governed LLM calls |
+| **MVP++** | Sarvam STT/TTS + Kannada; file upload for audio |
 | **v2** | Browser microphone (HTTPS), streaming UI, Sarvam rate-limit handling |
 | **v3** | Optional **Databricks Vector Search** if SKU/cost allow |
 
@@ -132,16 +136,126 @@ The notebook already materializes **`main.india_legal.legal_rag_corpus`** with c
 
 ---
 
-## Summary
+## 8. Build sequence — verify *your* workspace (small pieces)
 
-**Done:** Ingestion notebook in repo, Delta corpus, secrets pattern, local tests for helpers.  
-**Next:** Embedding + vector index + manifest from `legal_rag_corpus`, then `src/nyaya_dhwani` RAG pipeline and Databricks App (or notebook) for Sarvam ↔ retrieve ↔ LLM ↔ Sarvam.
+Do these **in order**. After each step, **note pass / fail** (and any error text). That tells us whether to target **notebook-only**, **Databricks Apps**, **Model Serving**, **AI Gateway**, or **external LLM + MLflow tracing** for your SKU.
+
+### Step 0 — Already done if you followed the repo
+
+| # | Try | Pass criteria |
+|---|-----|----------------|
+| 0a | Run [`notebooks/india_legal_policy_ingest.ipynb`](../notebooks/india_legal_policy_ingest.ipynb) through `legal_rag_corpus` | `SELECT COUNT(*) FROM main.india_legal.legal_rag_corpus` > 0 |
+| 0b | Run [`notebooks/build_rag_index.ipynb`](../notebooks/build_rag_index.ipynb) through index write + smoke cell | `nyaya_index/` contains `corpus.faiss`, `chunks.parquet`, `manifest.json`; `ci.search` returns rows |
+
+**If 0b failed:** fix deps (`faiss-cpu` 1.7.x, `numpy<2`, lazy `get_faiss`) per README — do not start the app layer until search works.
 
 ---
 
-## Verification checklist
+### Step 1 — MLflow UI (low risk)
 
-- [ ] `SHOW TABLES IN main.india_legal` after ingestion
-- [ ] Sample `SELECT` on `legal_rag_corpus` with filters on `source`
+| # | Try | Pass criteria |
+|---|-----|----------------|
+| 1a | Sidebar: **Machine Learning** → **Experiments** (or **Experiments** in workspace) | UI opens; you can create an experiment, e.g. `/Shared/nyaya-dhwani` |
+| 1b | In any notebook: `import mlflow; mlflow.set_experiment("/Shared/nyaya-dhwani"); mlflow.start_run(); mlflow.log_param("probe", 1); mlflow.end_run()` | Run succeeds; run appears in UI |
+
+**If 1b fails:** note the error (MLflow not on cluster / serverless). We can skip MLflow for MVP and add it when compute allows.
+
+---
+
+### Step 2 — Hosted LLM in the workspace (pick what your UI offers)
+
+Product names change; use whatever your workspace lists under **AI/ML**, **Serving**, **Playground**, or **Foundation Model APIs**.
+
+| # | Try | Pass criteria |
+|---|-----|----------------|
+| 2a | Open **Playground** or **Chat** against a **Databricks-managed** or **external** model | You get one completion without writing an App |
+| 2b | In a notebook, run the **smallest documented example** for workspace LLM access (often via `databricks-*` SDK or REST). *Do not commit API output.* | One programmatic completion works |
+
+**Report back:** endpoint type (OpenAI-compatible URL, `serving_endpoint` name, etc.).
+
+**If 2a–2b fail:** MVP can use **external** OpenAI-compatible API with key in **`nyaya-dhwani`** scope (e.g. `openai_api_key`) — same RAG code, different `llm_client` backend.
+
+---
+
+### Step 3 — AI Gateway / governed routing (optional)
+
+| # | Try | Pass criteria |
+|---|-----|----------------|
+| 3a | Search workspace docs or sidebar for **AI Gateway**, **Inference**, **External models** | You see a way to register or route models |
+| 3b | If available, route **one** model through the gateway and call it from a notebook using the **documented** client | Same as 2b, but URL/key pattern is gateway-specific |
+
+**If unavailable:** implement `llm_client` with direct provider first; add gateway later.
+
+---
+
+### Step 4 — Databricks Apps (optional for MVP)
+
+| # | Try | Pass criteria |
+|---|-----|----------------|
+| 4a | Sidebar: **Apps** or **Compute → Apps** | **Create** or **Deploy** is visible |
+| 4b | Deploy a **hello-world** sample app from docs (FastAPI “hello”) | URL opens |
+
+**If 4a fails:** ship **MVP in a notebook** (text box + `display` + RAG function) or a **job** that answers batch queries — still valid for the hackathon.
+
+---
+
+### Step 5 — Code we add after your report
+
+| You confirmed | We add (repo) |
+|---------------|----------------|
+| Step 2 works (hosted or external LLM) | `src/nyaya_dhwani/llm_client.py` — single interface; pluggable backend |
+| Step 1 works | Optional `mlflow.trace` / autolog around retrieve + LLM |
+| Step 4 works | `app/main.py` — FastAPI: `POST /ask` → retrieve → LLM → JSON |
+| Only Step 0 | Notebook template cell: `def ask(q): ...` using `CorpusIndex` + placeholder LLM |
+
+**Nothing here requires Vector Search** — FAISS on Volume is enough until you outgrow it.
+
+---
+
+## 9. Vector Search and Apps on Free Edition (you have both)
+
+If **Compute → Vector Search** and **Compute → Apps → Create app** are visible (as in your workspace), you **can** use them. They solve different layers than the current FAISS notebook pipeline.
+
+### Databricks Apps — use for the “real” HTTP app
+
+| Role | Notes |
+|------|--------|
+| **What** | Host a small **FastAPI** (or Gradio) app in the workspace with a public or workspace URL. |
+| **Fit** | **Load `CorpusIndex` from the Volume path** at startup (same as the notebook), expose `POST /ask` → embed query → FAISS search → LLM → JSON. |
+| **Secrets** | LLM + Sarvam keys via **Secrets** or App env — no keys in git. |
+| **Next repo step** | Add `app/main.py` + `app.yaml` / bundle per [Databricks Apps docs](https://docs.databricks.com/en/dev-tools/databricks-apps/index.html). |
+
+**Recommendation:** Ship **MVP retrieval + LLM inside an App** once `llm_client` exists; keep FAISS on Volume first — no Vector Search required.
+
+### Databricks Vector Search — optional upgrade path
+
+| Role | Notes |
+|------|--------|
+| **What** | **Managed** vector index over a **Delta** source table, with workspace-managed embedding or your model, **query APIs** without holding FAISS in memory. |
+| **vs FAISS** | You already have **`legal_rag_corpus`** + offline **FAISS + Parquet** on a Volume. Vector Search is an **alternate** retrieval backend: create an index **synced from** `main.india_legal.legal_rag_corpus` (or a filtered view), point at the same `text` column, choose an embedding endpoint consistent with your app. |
+| **Pros** | No large FAISS load in the App container; scaling and ops are Databricks-managed; filters in UI/API. |
+| **Cons** | Extra setup, embedding **must** match or you re-embed; cost/limits depend on SKU. |
+| **When** | After MVP works: **migrate** or **dual-run** (A/B) if FAISS cold start or size becomes painful. |
+
+### AI Gateway (sidebar)
+
+Use **AI Gateway** to route **LLM** calls (generation after retrieve), not to replace **sentence-transformers** embeddings unless you switch to a **hosted embedding** model and re-index.
+
+---
+
+## Summary
+
+**Done:** Ingestion notebook, Delta corpus, FAISS index + manifest on Volume, `nyaya_dhwani` retrieval + embedder, lazy FAISS import, Parquet-safe chunks.  
+**Next (your turn):** Run **§8 steps 1–4** in small pieces and note what works — then we add **`llm_client` + one query path** (notebook or App) and optional MLflow tracing. **Apps** are enabled for you — good target for `app/main.py`. **Vector Search** is optional later.
+
+---
+
+## Verification checklist (legacy)
+
+- [x] `SHOW TABLES IN main.india_legal` after ingestion
+- [x] Sample `SELECT` on `legal_rag_corpus` with filters on `source`
 - [ ] `python3 -m pytest tests/ -q` locally
-- [ ] After RAG build: index files + `manifest.json` on Volume; App loads and answers a smoke query
+- [x] After RAG build: index files + `manifest.json` on Volume; notebook `CorpusIndex.search` smoke query
+- [ ] §8 Step 1 — MLflow experiment log from notebook
+- [ ] §8 Step 2 — one LLM completion (workspace or external)
+- [ ] §8 Step 4 — Databricks App hello-world *(optional)*
