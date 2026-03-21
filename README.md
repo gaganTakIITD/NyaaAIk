@@ -61,8 +61,10 @@ Used by [`notebooks/india_legal_policy_ingest.ipynb`](notebooks/india_legal_poli
 ### 3. Build the vector index (Databricks notebook)
 
 1. Open [`notebooks/build_rag_index.ipynb`](notebooks/build_rag_index.ipynb).
-2. Set **`REPO_ROOT`** in the first code cell to your Repos checkout path (e.g. `/Workspace/Users/<you>@.../nyaya-dhwani-hackathon`).
-3. Run all cells. This writes **`/Volumes/main/india_legal/legal_files/nyaya_index/`** containing `corpus.faiss`, `chunks.parquet`, and `manifest.json`.
+2. In the **first code cell**, set **`REPO_ROOT`** to your Repos checkout (Workspace sidebar → right-click the repo → **Copy path**). That cell runs `pip install -e "$REPO_ROOT[rag,rag_embed]"` so `import nyaya_dhwani` works on the cluster.
+3. Run **all cells in order** (install cell before any `from nyaya_dhwani...` import). This writes **`/Volumes/main/india_legal/legal_files/nyaya_index/`** containing `corpus.faiss`, `chunks.parquet`, and `manifest.json`.
+
+If you see **`ModuleNotFoundError: No module named 'nyaya_dhwani'`**: fix `REPO_ROOT`, re-run the install cell, then run `dbutils.library.restartPython()` once and run the notebook from the top.
 
 ### 4. Use the Python package locally (optional)
 
