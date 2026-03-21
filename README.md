@@ -158,7 +158,8 @@ Uncomment the middle lines when `INDEX_DIR` is valid.
 |------|---------|
 | [`notebooks/india_legal_policy_ingest.ipynb`](notebooks/india_legal_policy_ingest.ipynb) | Legal/policy ingestion → Delta tables + `legal_rag_corpus` |
 | [`notebooks/build_rag_index.ipynb`](notebooks/build_rag_index.ipynb) | Embeddings + FAISS + `manifest.json` on UC Volume (`.../nyaya_index/`) |
-| [`src/nyaya_dhwani/`](src/nyaya_dhwani/) | Package: `text_utils`, `embedder`, `index_builder`, `retrieval`, `manifest`, `sarvam_client` |
+| [`src/nyaya_dhwani/`](src/nyaya_dhwani/) | Package: `text_utils`, `embedder`, `index_builder`, `retrieval`, `manifest`, `sarvam_client`, `llm_client` |
+| [`docs/PLAYGROUND_TO_APP.md`](docs/PLAYGROUND_TO_APP.md) | Map Playground **Get code** → env vars → RAG answer |
 | [`tests/`](tests/) | `pytest` — see [Testing](#testing) |
 | [`docs/PLAN.md`](docs/PLAN.md) | Product plan |
 
