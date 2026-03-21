@@ -35,8 +35,12 @@ Your **Get code** output may name variables differently — align them to the ab
 3. `messages = [{"role":"user","content": f"Context:\n{ctx}\n\nQuestion: {query}"}]` (add a system disclaimer: not legal advice).  
 4. `llm_client.chat_completions(messages)` → parse assistant text.
 
-## 5. Apps
+## 5. Apps (Gradio or FastAPI)
 
-When **§8 Step 4** is ready, the same `chat_completions` call runs inside **Databricks Apps**; load `CorpusIndex` from the Volume path at startup.
+When **§8 Step 4** is ready, the same `chat_completions` call runs inside **Databricks Apps**. A **Gradio** hello-world deploy is enough to prove the path; extend it with:
+
+- **Volume** — App identity must be allowed to **read** `/Volumes/main/india_legal/.../nyaya_index/` (UC grants on the Volume + external location if any).
+- **Secrets** — Configure **App secrets** or env for `DATABRICKS_TOKEN`, `LLM_*`, and embedding/RAG deps (`faiss-cpu`, `sentence-transformers`, …) in `requirements.txt` / app spec.
+- **Cold start** — On first request (or at import), `CorpusIndex.load(INDEX_DIR)` + `SentenceEmbedder`; can take tens of seconds on Medium compute.
 
 See [PLAN.md §9](PLAN.md#9-vector-search-and-apps-on-free-edition-you-have-both).

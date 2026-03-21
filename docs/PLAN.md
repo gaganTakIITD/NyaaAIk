@@ -196,7 +196,7 @@ Product names change; use whatever your workspace lists under **AI/ML**, **Servi
 | # | Try | Pass criteria |
 |---|-----|----------------|
 | 4a | Sidebar: **Apps** or **Compute → Apps** | **Create** or **Deploy** is visible |
-| 4b | Deploy a **hello-world** sample app from docs (FastAPI “hello”) | URL opens |
+| 4b | Deploy a **hello-world** (FastAPI or **Gradio** sample from Databricks docs) | App status **Running**; URL loads in browser |
 
 **If 4a fails:** ship **MVP in a notebook** (text box + `display` + RAG function) or a **job** that answers batch queries — still valid for the hackathon.
 
@@ -208,7 +208,7 @@ Product names change; use whatever your workspace lists under **AI/ML**, **Servi
 |---------------|----------------|
 | Step 2 works (hosted or external LLM) | `src/nyaya_dhwani/llm_client.py` — OpenAI-compatible `chat_completions` + `rag_user_message` ([PLAYGROUND_TO_APP.md](PLAYGROUND_TO_APP.md)) |
 | Step 1 works | Optional `mlflow.trace` / autolog around retrieve + LLM |
-| Step 4 works | `app/main.py` — FastAPI: `POST /ask` → retrieve → LLM → JSON |
+| Step 4 works | `app/` — **FastAPI** `POST /ask` *or* **Gradio** blocks (`query` → retrieve → `llm_client`) → same RAG path |
 | Only Step 0 | Notebook template cell: `def ask(q): ...` using `CorpusIndex` + placeholder LLM |
 
 **Nothing here requires Vector Search** — FAISS on Volume is enough until you outgrow it.
@@ -223,7 +223,7 @@ If **Compute → Vector Search** and **Compute → Apps → Create app** are vis
 
 | Role | Notes |
 |------|--------|
-| **What** | Host a small **FastAPI** (or Gradio) app in the workspace with a public or workspace URL. |
+| **What** | Host a small **FastAPI** or **Gradio** app in the workspace (hello-world Gradio deploy confirms the path). |
 | **Fit** | **Load `CorpusIndex` from the Volume path** at startup (same as the notebook), expose `POST /ask` → embed query → FAISS search → LLM → JSON. |
 | **Secrets** | LLM + Sarvam keys via **Secrets** or App env — no keys in git. |
 | **Next repo step** | Add `app/main.py` + `app.yaml` / bundle per [Databricks Apps docs](https://docs.databricks.com/en/dev-tools/databricks-apps/index.html). |
@@ -248,8 +248,8 @@ Use **AI Gateway** to route **LLM** calls (generation after retrieve), not to re
 
 ## Summary
 
-**Done:** Ingestion notebook, Delta corpus, FAISS index + manifest on Volume, `nyaya_dhwani` retrieval + embedder, lazy FAISS import, Parquet-safe chunks.  
-**Next (your turn):** Run **§8 steps 1–4** in small pieces and note what works — then we add **`llm_client` + one query path** (notebook or App) and optional MLflow tracing. **Apps** are enabled for you — good target for `app/main.py`. **Vector Search** is optional later.
+**Done:** Ingestion notebook, Delta corpus, FAISS index + manifest on Volume, `nyaya_dhwani` retrieval + embedder, lazy FAISS import, Parquet-safe chunks, `llm_client`, Playground + MLflow probes, **Gradio hello-world on Databricks Apps**.  
+**Next:** Wire **retrieve + `llm_client`** into a **Gradio** (or FastAPI) app deployed like hello-world: mount Volume read for `nyaya_index`, set **App secrets** for `DATABRICKS_TOKEN` / `LLM_*`, cold-start load `CorpusIndex` + `SentenceEmbedder`. **Vector Search** remains optional.
 
 ---
 
@@ -259,6 +259,8 @@ Use **AI Gateway** to route **LLM** calls (generation after retrieve), not to re
 - [x] Sample `SELECT` on `legal_rag_corpus` with filters on `source`
 - [ ] `python3 -m pytest tests/ -q` locally
 - [x] After RAG build: index files + `manifest.json` on Volume; notebook `CorpusIndex.search` smoke query
-- [ ] §8 Step 1 — MLflow experiment log from notebook
-- [ ] §8 Step 2 — one LLM completion (workspace or external)
-- [ ] §8 Step 4 — Databricks App hello-world *(optional)*
+- [x] §8 Step 1 — MLflow experiment log from notebook *(example workspace)*
+- [x] §8 Step 2 — Playground LLM + **Get code** path *(example workspace)*
+- [x] §8 Step 4 — Databricks App **Gradio** hello-world **Running** *(example workspace)*
+
+Template for *your* workspace: copy the rows above and uncheck until done.
