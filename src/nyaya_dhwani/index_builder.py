@@ -3,28 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
+from nyaya_dhwani.faiss_compat import get_faiss
 from nyaya_dhwani.manifest import RAGManifest, utc_now_iso
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-
-try:
-    import faiss  # type: ignore[import-untyped]
-except ImportError:
-    faiss = None  # type: ignore[assignment]
-
-
-def _require_faiss() -> None:
-    if faiss is None:
-        raise ImportError(
-            "faiss is not installed in this Python environment. "
-            "Run: pip install 'faiss-cpu>=1.8.0'  (or pip install 'nyaya-dhwani[rag]')"
-        )
 
 
 def _parquet_safe_str(x: object) -> str:
@@ -47,9 +35,9 @@ def _sanitize_chunks_df(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def build_flat_ip_index(embeddings: "NDArray[np.float32]") -> "faiss.Index":
+def build_flat_ip_index(embeddings: "NDArray[np.float32]") -> Any:
     """Inner-product index; use with L2-normalized vectors for cosine similarity."""
-    _require_faiss()
+    faiss = get_faiss()
     n, d = embeddings.shape
     index = faiss.IndexFlatIP(d)
     vectors = np.ascontiguousarray(embeddings, dtype=np.float32)
@@ -74,7 +62,7 @@ def save_rag_artifacts(
     chunks_df must have rows in the same order as embedding rows (0..n-1 == FAISS ids).
     Expected columns at minimum: chunk_id, text (title/source optional).
     """
-    _require_faiss()
+    faiss = get_faiss()
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 

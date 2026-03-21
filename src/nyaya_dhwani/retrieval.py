@@ -8,15 +8,11 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
+from nyaya_dhwani.faiss_compat import get_faiss
 from nyaya_dhwani.manifest import RAGManifest
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-
-try:
-    import faiss  # type: ignore[import-untyped]
-except ImportError:
-    faiss = None
 
 
 class CorpusIndex:
@@ -29,8 +25,7 @@ class CorpusIndex:
 
     @classmethod
     def load(cls, index_dir: str | Path) -> CorpusIndex:
-        if faiss is None:
-            raise ImportError("Install RAG extras: pip install 'nyaya-dhwani[rag]'")
+        faiss = get_faiss()
         index_dir = Path(index_dir)
         manifest = RAGManifest.load(index_dir / "manifest.json")
         idx = faiss.read_index(str(index_dir / manifest.faiss_index_file))
@@ -46,7 +41,7 @@ class CorpusIndex:
         q = np.asarray(query_embedding, dtype=np.float32)
         if q.ndim == 1:
             q = q.reshape(1, -1)
-        faiss.normalize_L2(q)
+        get_faiss().normalize_L2(q)
         scores, ids = self.index.search(q, min(k, self.manifest.num_vectors))
         rows = []
         for rank, (score, iid) in enumerate(zip(scores[0], ids[0])):
