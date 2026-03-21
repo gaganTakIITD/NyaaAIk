@@ -21,7 +21,10 @@ except ImportError:
 
 def _require_faiss() -> None:
     if faiss is None:
-        raise ImportError("Install RAG extras: pip install 'nyaya-dhwani[rag]'")
+        raise ImportError(
+            "faiss is not installed in this Python environment. "
+            "Run: pip install 'faiss-cpu>=1.8.0'  (or pip install 'nyaya-dhwani[rag]')"
+        )
 
 
 def _parquet_safe_str(x: object) -> str:
