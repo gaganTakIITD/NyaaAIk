@@ -47,6 +47,7 @@ There is **no standalone HTTP app** in this repo yet (FastAPI/Gradio is [planned
 2. Attach **compute** (cluster or serverless SQL/Spark as supported by your SKU).
 3. Run cells **top to bottom** in order (install → config → Volume → sources → `legal_rag_corpus`).  
    - If `ai_parse_document` is unavailable on your runtime, rely on BNS CSV / `load_uploaded_file` paths documented in the notebook.
+   - **Cell 9b (BNS PDF):** `ai_parse_document` returns **VARIANT**. The notebook stores **`to_json(...)` as `parsed_json` (STRING)** and parses with `from_json`, so Delta never keeps a VARIANT column for this step. If `doc.elements` is empty after the change, inspect one row: `display(spark.table("main.india_legal.bns_parsed_raw").selectExpr("substring(parsed_json,1,800)").limit(1))` and adjust the `StructType` in cell 9b to match the JSON keys returned by your runtime.
 4. Confirm tables exist, e.g. `SHOW TABLES IN main.india_legal` and `SELECT COUNT(*) FROM main.india_legal.legal_rag_corpus`.
 
 ### 3. Build the vector index (Databricks notebook)
