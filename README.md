@@ -50,6 +50,14 @@ There is **no standalone HTTP app** in this repo yet (FastAPI/Gradio is [planned
    - **Cell 9b (BNS PDF):** `ai_parse_document` returns **VARIANT**. The notebook stores **`to_json(...)` as `parsed_json` (STRING)** and parses with `from_json`, so Delta never keeps a VARIANT column for this step. If `doc.elements` is empty after the change, inspect one row: `display(spark.table("main.india_legal.bns_parsed_raw").selectExpr("substring(parsed_json,1,800)").limit(1))` and adjust the `StructType` in cell 9b to match the JSON keys returned by your runtime.
 4. Confirm tables exist, e.g. `SHOW TABLES IN main.india_legal` and `SELECT COUNT(*) FROM main.india_legal.legal_rag_corpus`.
 
+#### Data sources
+
+Used by [`notebooks/india_legal_policy_ingest.ipynb`](notebooks/india_legal_policy_ingest.ipynb) (exact URLs and column handling are in the notebook):
+
+- **`bns_sections`** — CSV on Unity Catalog Volume (e.g. uploaded `bns_sections.csv`); if the Volume file is missing, GitHub mirrors ([OpenNyAI `bns_sections.csv`](https://raw.githubusercontent.com/OpenNyAI/Opennyai/main/datasets/bns_sections.csv), [nandr39 `bns-dataset`](https://raw.githubusercontent.com/nandr39/bns-dataset/main/bns_sections.csv)); optional BNS 2023 gazette PDFs (MHA / India Code–style links in §3c) plus `ai_parse_document` when no CSV is available.
+- **`bns_ipc_mapping`** — [nandhakumarg/IPC_and_BNS_transformation](https://huggingface.co/datasets/nandhakumarg/IPC_and_BNS_transformation) on Hugging Face (Apache-2.0). A small built-in stub is used only if that download fails.
+- **Sarvam (optional)** — [Sarvam Chat API](https://api.sarvam.ai) (`sarvam-m`) for PDF-section enrichment and the §1b connectivity check; [dashboard](https://dashboard.sarvam.ai) for keys and access.
+
 ### 3. Build the vector index (Databricks notebook)
 
 1. Open [`notebooks/build_rag_index.ipynb`](notebooks/build_rag_index.ipynb).
