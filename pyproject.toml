@@ -14,9 +14,10 @@ dev = [
 ]
 # Core vector index (tests + retrieval); sentence-transformers is separate (heavy).
 rag = [
-  # faiss-cpu 1.8+ imports numpy._core (NumPy 2.x); NumPy 1.x raises ModuleNotFoundError
-  "numpy>=2.0,<3",
-  "faiss-cpu>=1.8.0",
+  # faiss-cpu 1.8+ uses numpy._core (NumPy 2+), which conflicts with databricks-connect (numpy<2).
+  # faiss-cpu 1.7.x uses numpy.core and works with numpy 1.26 + Spark client libraries.
+  "numpy>=1.24,<2",
+  "faiss-cpu>=1.7.0,<1.8",
   "pyarrow>=14.0.0",
 ]
 rag_embed = [
