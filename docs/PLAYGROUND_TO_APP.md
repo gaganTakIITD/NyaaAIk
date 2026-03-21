@@ -22,11 +22,34 @@ For `src/nyaya_dhwani/llm_client.py` (OpenAI-compatible `chat/completions`):
 | Env | Purpose |
 |-----|---------|
 | `LLM_CHAT_COMPLETIONS_URL` | **Full** URL to `POST` (if your snippet uses a single URL). **Or** omit and set `LLM_OPENAI_BASE_URL` instead. |
-| `LLM_OPENAI_BASE_URL` | Base URL only; we append `/chat/completions` if needed. |
+| `LLM_OPENAI_BASE_URL` | Base URL only; we append `/chat/completions` when the base ends with `/v1` (including **AI Gateway** `…/mlflow/v1` from **Get code**). |
 | `LLM_MODEL` | Model or endpoint name as required by your snippet. |
 | `DATABRICKS_TOKEN` or `LLM_API_KEY` | Bearer token for the request (from Secrets in Jobs/Apps). |
 
 Your **Get code** output may name variables differently — align them to the above or pass arguments explicitly in code.
+
+### AI Gateway (typical Get code shape)
+
+Playground **Get code** often looks like:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.environ["DATABRICKS_TOKEN"],
+    base_url="https://<workspace-id>.ai-gateway.cloud.databricks.com/mlflow/v1",
+)
+response = client.chat.completions.create(
+    model="databricks-llama-4-maverick",
+    messages=[{"role": "user", "content": "..."}],
+    max_tokens=5000,
+)
+```
+
+In the app, set `LLM_OPENAI_BASE_URL` to that same `base_url` (no trailing slash), `LLM_MODEL` to the same model id, and use either:
+
+- **`llm_client.chat_completions`** (uses `requests`; no extra package), or  
+- **`llm_client.complete_with_openai_sdk`** after `pip install 'nyaya-dhwani[llm_openai]'` — same SDK calls as Get code.
 
 ## 4. RAG glue (next)
 
