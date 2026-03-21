@@ -80,7 +80,7 @@ python3 -m pip install -e ".[dev,rag,rag_embed]"   # rag_embed = sentence-transf
 
 ### 5. Roadmap: single “app” entrypoint
 
-A **Databricks App** or **FastAPI** service that chains Sarvam STT → embed → FAISS search → LLM → Sarvam TTS is described in [docs/PLAN.md](docs/PLAN.md); it is not implemented in this branch.
+A **Databricks App** or **FastAPI** service that chains Sarvam STT → embed → FAISS search → LLM → Sarvam TTS is described in [docs/PLAN.md](docs/PLAN.md); it is not implemented in this branch. **Workspace probes** (MLflow, LLM, Apps) to run before adding code: [PLAN §8](docs/PLAN.md#8-build-sequence--verify-your-workspace-small-pieces).
 
 ---
 
