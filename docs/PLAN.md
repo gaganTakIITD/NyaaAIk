@@ -212,10 +212,41 @@ Product names change; use whatever your workspace lists under **AI/ML**, **Servi
 
 ---
 
+## 9. Vector Search and Apps on Free Edition (you have both)
+
+If **Compute → Vector Search** and **Compute → Apps → Create app** are visible (as in your workspace), you **can** use them. They solve different layers than the current FAISS notebook pipeline.
+
+### Databricks Apps — use for the “real” HTTP app
+
+| Role | Notes |
+|------|--------|
+| **What** | Host a small **FastAPI** (or Gradio) app in the workspace with a public or workspace URL. |
+| **Fit** | **Load `CorpusIndex` from the Volume path** at startup (same as the notebook), expose `POST /ask` → embed query → FAISS search → LLM → JSON. |
+| **Secrets** | LLM + Sarvam keys via **Secrets** or App env — no keys in git. |
+| **Next repo step** | Add `app/main.py` + `app.yaml` / bundle per [Databricks Apps docs](https://docs.databricks.com/en/dev-tools/databricks-apps/index.html). |
+
+**Recommendation:** Ship **MVP retrieval + LLM inside an App** once `llm_client` exists; keep FAISS on Volume first — no Vector Search required.
+
+### Databricks Vector Search — optional upgrade path
+
+| Role | Notes |
+|------|--------|
+| **What** | **Managed** vector index over a **Delta** source table, with workspace-managed embedding or your model, **query APIs** without holding FAISS in memory. |
+| **vs FAISS** | You already have **`legal_rag_corpus`** + offline **FAISS + Parquet** on a Volume. Vector Search is an **alternate** retrieval backend: create an index **synced from** `main.india_legal.legal_rag_corpus` (or a filtered view), point at the same `text` column, choose an embedding endpoint consistent with your app. |
+| **Pros** | No large FAISS load in the App container; scaling and ops are Databricks-managed; filters in UI/API. |
+| **Cons** | Extra setup, embedding **must** match or you re-embed; cost/limits depend on SKU. |
+| **When** | After MVP works: **migrate** or **dual-run** (A/B) if FAISS cold start or size becomes painful. |
+
+### AI Gateway (sidebar)
+
+Use **AI Gateway** to route **LLM** calls (generation after retrieve), not to replace **sentence-transformers** embeddings unless you switch to a **hosted embedding** model and re-index.
+
+---
+
 ## Summary
 
 **Done:** Ingestion notebook, Delta corpus, FAISS index + manifest on Volume, `nyaya_dhwani` retrieval + embedder, lazy FAISS import, Parquet-safe chunks.  
-**Next (your turn):** Run **§8 steps 1–4** in small pieces and note what works — then we add **`llm_client` + one query path** (notebook or App) and optional MLflow tracing.
+**Next (your turn):** Run **§8 steps 1–4** in small pieces and note what works — then we add **`llm_client` + one query path** (notebook or App) and optional MLflow tracing. **Apps** are enabled for you — good target for `app/main.py`. **Vector Search** is optional later.
 
 ---
 
