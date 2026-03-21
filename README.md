@@ -64,7 +64,7 @@ Used by [`notebooks/india_legal_policy_ingest.ipynb`](notebooks/india_legal_poli
 2. In the **first code cell**, set **`REPO_ROOT`** to your Repos checkout (Workspace sidebar → right-click the repo → **Copy path**). That cell runs `pip install -e "$REPO_ROOT[rag,rag_embed]"` so `import nyaya_dhwani` works on the cluster.
 3. Run **all cells in order** (install cell before any `from nyaya_dhwani...` import). This writes **`/Volumes/main/india_legal/legal_files/nyaya_index/`** containing `corpus.faiss`, `chunks.parquet`, and `manifest.json`.
 
-If you see **`ModuleNotFoundError: No module named 'nyaya_dhwani'`**: fix `REPO_ROOT`, re-run the install cell, then run `dbutils.library.restartPython()` once and run the notebook from the top.
+If you see **`ModuleNotFoundError: No module named 'nyaya_dhwani'`**: set **`REPO_ROOT`** in the first code cell to the real path from **Copy path** (not the `<YOUR_EMAIL>` placeholder), run that cell until it prints `✅ import nyaya_dhwani`, then run the rest in order. Do not put **`%restart_python`** in the install cell — it restarts the kernel and breaks the run order; the notebook adds `src/` to `sys.path` so the package resolves even when `pip install -e` is flaky.
 
 ### 4. Use the Python package locally (optional)
 

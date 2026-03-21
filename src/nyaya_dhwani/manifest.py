@@ -26,7 +26,12 @@ class RAGManifest:
     metric: str = "inner_product"  # cosine after L2 normalize
 
     def to_json(self) -> str:
-        return json.dumps(asdict(self), indent=2)
+        def _default(o: object) -> int | float | str:
+            if hasattr(o, "item"):
+                return o.item()  # numpy scalars
+            raise TypeError(f"not JSON serializable: {type(o)!r}")
+
+        return json.dumps(asdict(self), indent=2, default=_default)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> RAGManifest:
