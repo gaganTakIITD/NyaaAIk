@@ -1,0 +1,30 @@
+[project]
+name = "nyaya-dhwani"
+version = "0.1.0"
+description = "Legal RAG ingestion and multilingual assistant (Databricks + Sarvam)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "pandas>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+# Core vector index (tests + retrieval); sentence-transformers is separate (heavy).
+rag = [
+  "numpy>=1.24",
+  "faiss-cpu>=1.8.0",
+  "pyarrow>=14.0.0",
+]
+rag_embed = [
+  "sentence-transformers>=2.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+  "network: tests that call external HTTP (opt-in)",
+]
