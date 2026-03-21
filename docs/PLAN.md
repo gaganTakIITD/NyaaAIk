@@ -13,7 +13,7 @@ This document is the **canonical plan**; keep it in sync with development.
 | **Ingestion** | [`notebooks/india_legal_policy_ingest.ipynb`](../notebooks/india_legal_policy_ingest.ipynb) in git — Delta tables under `main.india_legal`, including `legal_rag_corpus` |
 | **Secrets** | Scope `nyaya-dhwani` (`datagov_api_key`, `sarvam_api_key`) or env vars — no keys committed |
 | **Notebook fixes** | Sarvam cell syntax (`else` block), safe JSON error handling, corpus prefers `english_summary` for BNS rows |
-| **Package** | [`text_utils`](../src/nyaya_dhwani/text_utils.py), [`manifest`](../src/nyaya_dhwani/manifest.py), [`embedder`](../src/nyaya_dhwani/embedder.py), [`index_builder`](../src/nyaya_dhwani/index_builder.py), [`retrieval`](../src/nyaya_dhwani/retrieval.py), [`sarvam_client`](../src/nyaya_dhwani/sarvam_client.py) |
+| **Package** | [`text_utils`](../src/nyaya_dhwani/text_utils.py), [`manifest`](../src/nyaya_dhwani/manifest.py), [`embedder`](../src/nyaya_dhwani/embedder.py), [`index_builder`](../src/nyaya_dhwani/index_builder.py), [`retrieval`](../src/nyaya_dhwani/retrieval.py), [`sarvam_client`](../src/nyaya_dhwani/sarvam_client.py), [`llm_client`](../src/nyaya_dhwani/llm_client.py) |
 | **RAG index** | [`notebooks/build_rag_index.ipynb`](../notebooks/build_rag_index.ipynb) writes FAISS + Parquet + `manifest.json` under `/Volumes/main/india_legal/legal_files/nyaya_index/` |
 | **RAG smoke test** | `CorpusIndex.load` + `search` works in notebook when index + deps are installed |
 | **App UI** | Not built — no `app/main.py` yet |
@@ -94,7 +94,8 @@ The notebook already materializes **`main.india_legal.legal_rag_corpus`** with c
 | `notebooks/india_legal_policy_ingest.ipynb` | Done — ingestion + `legal_rag_corpus` |
 | `src/nyaya_dhwani/text_utils.py` | Done |
 | `sarvam_client.py`, `embedder.py`, `index_builder.py`, `retrieval.py`, `manifest.py` | Done |
-| `llm_client.py`, `pipeline.py` | Planned |
+| `llm_client.py` | Done — OpenAI-compatible chat; see [PLAYGROUND_TO_APP.md](PLAYGROUND_TO_APP.md) |
+| `pipeline.py` | Planned |
 | `app/main.py` | Planned — FastAPI/Gradio |
 | `databricks.yml` | Optional — Asset Bundle |
 | `tests/` | Done for helpers; extend when RAG modules exist |
@@ -171,6 +172,8 @@ Product names change; use whatever your workspace lists under **AI/ML**, **Servi
 | 2a | Open **Playground** or **Chat** against a **Databricks-managed** or **external** model | You get one completion without writing an App |
 | 2b | In a notebook, run the **smallest documented example** for workspace LLM access (often via `databricks-*` SDK or REST). *Do not commit API output.* | One programmatic completion works |
 
+**Example (confirmed):** Playground works with **Gemma 3 12B** and **Meta Llama 3.1 8B Instruct** for context + question — same pattern as post-retrieval generation. Use **Get code** → notebook → env vars per [PLAYGROUND_TO_APP.md](PLAYGROUND_TO_APP.md).
+
 **Report back:** endpoint type (OpenAI-compatible URL, `serving_endpoint` name, etc.).
 
 **If 2a–2b fail:** MVP can use **external** OpenAI-compatible API with key in **`nyaya-dhwani`** scope (e.g. `openai_api_key`) — same RAG code, different `llm_client` backend.
@@ -203,7 +206,7 @@ Product names change; use whatever your workspace lists under **AI/ML**, **Servi
 
 | You confirmed | We add (repo) |
 |---------------|----------------|
-| Step 2 works (hosted or external LLM) | `src/nyaya_dhwani/llm_client.py` — single interface; pluggable backend |
+| Step 2 works (hosted or external LLM) | `src/nyaya_dhwani/llm_client.py` — OpenAI-compatible `chat_completions` + `rag_user_message` ([PLAYGROUND_TO_APP.md](PLAYGROUND_TO_APP.md)) |
 | Step 1 works | Optional `mlflow.trace` / autolog around retrieve + LLM |
 | Step 4 works | `app/main.py` — FastAPI: `POST /ask` → retrieve → LLM → JSON |
 | Only Step 0 | Notebook template cell: `def ask(q): ...` using `CorpusIndex` + placeholder LLM |
