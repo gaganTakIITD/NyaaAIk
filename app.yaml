@@ -11,3 +11,10 @@ env:
     value: "https://7474650313055161.ai-gateway.cloud.databricks.com/mlflow/v1"
   - name: "LLM_MODEL"
     value: "databricks-llama-4-maverick"
+  # Vector Search (primary backend, falls back to FAISS if unavailable)
+  - name: "NYAYA_RETRIEVAL_BACKEND"
+    value: "vector_search"
+  - name: "NYAYA_VS_ENDPOINT_NAME"
+    value: "nyaya_vs_endpoint"
+  - name: "NYAYA_VS_INDEX_NAME"
+    value: "main.india_legal.legal_rag_corpus_index"
