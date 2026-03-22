@@ -56,7 +56,11 @@ from nyaya_dhwani.sarvam_client import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_INDEX_DIR = "/Volumes/main/india_legal/legal_files/nyaya_index"
+# UC Volume path (only accessible from notebooks/clusters, not Databricks Apps).
+_VOLUME_INDEX_PATH = "/Volumes/main/india_legal/legal_files/nyaya_index"
+# Local cache dir where the index is downloaded at startup on Databricks Apps.
+_LOCAL_INDEX_CACHE = "/tmp/nyaya_index"
+DEFAULT_INDEX_DIR = _VOLUME_INDEX_PATH
 
 TOPIC_SEEDS: dict[str, str] = {
     "Tenant rights": "What are my basic rights as a tenant in India regarding eviction and rent increases?",
@@ -116,8 +120,45 @@ SYSTEM_PROMPT = (
 )
 
 
+def _download_index_from_volume(volume_path: str, local_dir: str) -> str:
+    """Download index files from a UC Volume to a local directory using the Databricks SDK.
+
+    UC Volume paths (``/Volumes/...``) are FUSE-mounted on clusters/notebooks but
+    **not** available in Databricks Apps.  The SDK ``files`` API can read them.
+    """
+    from pathlib import Path
+    local = Path(local_dir)
+    if (local / "manifest.json").exists():
+        logger.info("Index already cached at %s", local)
+        return str(local)
+
+    logger.info("Downloading index from Volume %s → %s", volume_path, local)
+    from databricks.sdk import WorkspaceClient
+    w = WorkspaceClient()
+    local.mkdir(parents=True, exist_ok=True)
+    for item in w.files.list_directory_contents(volume_path):
+        if item.is_directory:
+            continue
+        dest = local / item.name
+        logger.info("  downloading %s (%s bytes)", item.name, item.file_size)
+        with w.files.download(item.path).contents as src, open(dest, "wb") as dst:
+            while True:
+                chunk = src.read(8 * 1024 * 1024)
+                if not chunk:
+                    break
+                dst.write(chunk)
+    logger.info("Index download complete → %s", local)
+    return str(local)
+
+
 def index_dir() -> str:
-    return os.environ.get("NYAYA_INDEX_DIR", DEFAULT_INDEX_DIR).strip()
+    """Resolve the index directory, downloading from the UC Volume if needed."""
+    path = os.environ.get("NYAYA_INDEX_DIR", DEFAULT_INDEX_DIR).strip()
+    # If the path is a UC Volume and doesn't exist locally (Databricks Apps),
+    # download via the SDK.
+    if path.startswith("/Volumes/") and not Path(path).exists():
+        path = _download_index_from_volume(path, _LOCAL_INDEX_CACHE)
+    return path
 
 
 def bcp47_target(lang: str) -> str:
