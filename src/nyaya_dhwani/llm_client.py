@@ -43,11 +43,21 @@ def _chat_url() -> str:
 
 
 def _bearer() -> str:
-    return (
+    token = (
         os.environ.get("DATABRICKS_TOKEN", "").strip()
         or os.environ.get("LLM_API_KEY", "").strip()
         or os.environ.get("OPENAI_API_KEY", "").strip()
     )
+    if token:
+        return token
+    # Databricks Apps: get an OAuth token from the SDK (service principal auth).
+    try:
+        from databricks.sdk import WorkspaceClient
+        w = WorkspaceClient()
+        return w.config.token
+    except Exception:
+        pass
+    return ""
 
 
 def chat_completions(

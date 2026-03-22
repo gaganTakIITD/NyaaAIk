@@ -3,3 +3,11 @@
 #
 # Without this file, Python apps default to: python app.py (this repo uses app/main.py).
 command: ["python", "app/main.py"]
+
+env:
+  - name: "SARVAM_API_KEY"
+    valueFrom: "sarvam_api_key"
+  - name: "LLM_OPENAI_BASE_URL"
+    value: "https://7474650313055161.ai-gateway.cloud.databricks.com/mlflow/v1"
+  - name: "LLM_MODEL"
+    value: "databricks-llama-4-maverick"
