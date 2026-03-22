@@ -212,6 +212,50 @@ env:
 - `SARVAM_API_KEY` via `valueFrom` — use SDK secret scope loading instead
 - `server_name`, `server_port`, `root_path` in `demo.launch()` — let the platform handle it
 
+## Retrieval backends (FAISS + Vector Search)
+
+The app supports two retrieval backends, controlled by the `NYAYA_RETRIEVAL_BACKEND` env var:
+
+| Backend | Value | When to use |
+|---------|-------|-------------|
+| FAISS (default) | `faiss` | No VS endpoint needed. Downloads index from UC Volume to `/tmp`. |
+| Databricks Vector Search | `vector_search` | Better recall (hybrid search), no cold-start download, auto-syncs with Delta table. Falls back to FAISS on failure. |
+
+### Keyword boosting (both backends)
+
+When the user's query mentions specific IPC/BNS section numbers (e.g. "IPC Section 413"), a keyword booster scans the corpus for chunks that match those section numbers and inserts them at the top of the results. This guarantees that short mapping chunks like `"BNS 317(4) replaces IPC 413"` appear in context even when semantic similarity alone wouldn't rank them in the top-k.
+
+The booster uses regex to detect patterns like "IPC Section 413", "BNS 303(1)", "Section 378 of IPC", etc.
+
+### Setting up Vector Search
+
+Run [`notebooks/setup_vector_search.py`](../notebooks/setup_vector_search.py) on a Databricks cluster:
+
+1. Creates a Standard VS endpoint (`nyaya_vs_endpoint`)
+2. Creates a Delta Sync index with managed embeddings (`databricks-bge-large-en` computes embeddings from the `text` column)
+3. Syncs the index from `main.india_legal.legal_rag_corpus`
+4. Runs a smoke test query
+
+Then add to `app.yaml`:
+
+```yaml
+env:
+  - name: "NYAYA_RETRIEVAL_BACKEND"
+    value: "vector_search"
+  - name: "NYAYA_VS_ENDPOINT_NAME"
+    value: "nyaya_vs_endpoint"
+  - name: "NYAYA_VS_INDEX_NAME"
+    value: "main.india_legal.legal_rag_corpus_index"
+```
+
+Grant the service principal access (see permissions table below), then redeploy.
+
+**Fallback behavior:** if the VS endpoint is unavailable, the app logs a warning and falls back to FAISS automatically. No user-visible error.
+
+### Embedding model note
+
+FAISS uses `all-MiniLM-L6-v2` (384 dims, run in the app). Vector Search uses `databricks-bge-large-en` (managed by Databricks, 1024 dims). The models differ but results are not mixed across backends — the fallback switches entirely, never blends scores.
+
 ## Service principal permissions
 
 The app's service principal needs:
@@ -221,6 +265,10 @@ The app's service principal needs:
 | **CAN_QUERY** | AI Gateway serving endpoint | LLM chat completions |
 | **READ** | UC Volume `main.india_legal.legal_files` | Download FAISS index at startup |
 | **READ** | Secret scope `nyaya-dhwani` | Load `sarvam_api_key` at startup |
+| **CAN_QUERY** | VS endpoint `nyaya_vs_endpoint` | Vector Search queries (only if using VS backend) |
+| **USE CATALOG** | `main` | VS needs catalog access (only if using VS backend) |
+| **USE SCHEMA** | `main.india_legal` | VS needs schema access (only if using VS backend) |
+| **SELECT** | `main.india_legal.legal_rag_corpus` | VS reads the source table (only if using VS backend) |
 
 ## Dependency pins
 
