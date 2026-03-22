@@ -1,3 +1,6 @@
-# Databricks Apps install step: pip install -r requirements.txt (see deploy docs).
-# Same as requirements-app.txt — editable install with RAG + Gradio extras.
+# Databricks Apps: pip install -r requirements.txt
+# Same pins as the Databricks Gradio template (gradio + huggingface_hub + pandas).
+gradio~=4.44.0
+huggingface-hub~=0.35.3
+pandas~=2.2.3
 -e ".[rag,rag_embed,app]"
