@@ -239,11 +239,49 @@ def _rag_answer_english(query_en: str) -> tuple[str, str]:
     return assistant_en, cites
 
 
+_TRANSLATE_CHUNK_LIMIT = 500  # Sarvam Mayura works best with shorter text
+
+
+def _chunked_translate(text: str, *, source: str, target: str) -> str:
+    """Translate long text by splitting into paragraph-sized chunks.
+
+    Sarvam Mayura can silently return the input unchanged for long text.
+    Splitting on paragraph boundaries keeps context while staying within limits.
+    """
+    # Split on double-newlines (paragraphs) or single newlines for lists
+    paragraphs = text.split("\n")
+    chunks: list[str] = []
+    current = ""
+    for para in paragraphs:
+        if len(current) + len(para) + 1 > _TRANSLATE_CHUNK_LIMIT and current:
+            chunks.append(current)
+            current = para
+        else:
+            current = f"{current}\n{para}" if current else para
+    if current:
+        chunks.append(current)
+
+    translated_parts = []
+    for chunk in chunks:
+        if not chunk.strip():
+            translated_parts.append(chunk)
+            continue
+        try:
+            result = translate_text(chunk, source_language_code=source, target_language_code=target)
+            translated_parts.append(result)
+        except Exception as e:
+            logger.warning("Mayura chunk translate failed, keeping original: %s", e)
+            translated_parts.append(chunk)
+    return "\n".join(translated_parts)
+
+
 def _maybe_translate(text: str, *, source: str, target: str) -> str:
     if source == target:
         return text
     if not sarvam_configured():
         return text
+    if len(text) > _TRANSLATE_CHUNK_LIMIT:
+        return _chunked_translate(text, source=source, target=target)
     try:
         return translate_text(text, source_language_code=source, target_language_code=target)
     except Exception as e:
