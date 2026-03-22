@@ -42,7 +42,8 @@ w = WorkspaceClient()
 # Check if endpoint already exists
 existing = [ep for ep in w.vector_search_endpoints.list_endpoints() if ep.name == VS_ENDPOINT_NAME]
 if existing:
-    print(f"Endpoint '{VS_ENDPOINT_NAME}' already exists (status: {existing[0].status})")
+    ep_status = getattr(existing[0], "status", None) or getattr(existing[0], "endpoint_status", None)
+    print(f"Endpoint '{VS_ENDPOINT_NAME}' already exists (status: {ep_status})")
 else:
     print(f"Creating endpoint '{VS_ENDPOINT_NAME}'...")
     w.vector_search_endpoints.create_endpoint(
@@ -61,9 +62,10 @@ else:
 print(f"Waiting for endpoint '{VS_ENDPOINT_NAME}' to be ONLINE...")
 for i in range(60):  # up to 10 minutes
     ep = w.vector_search_endpoints.get_endpoint(VS_ENDPOINT_NAME)
-    status = ep.status
+    # SDK versions vary: try .status, .endpoint_status, or inspect the object
+    status = getattr(ep, "status", None) or getattr(ep, "endpoint_status", None) or str(ep)
     print(f"  [{i * 10}s] Status: {status}")
-    if str(status) == "EndpointStatusStatus.ONLINE" or "ONLINE" in str(status):
+    if "ONLINE" in str(status).upper():
         print("Endpoint is ONLINE!")
         break
     time.sleep(10)
