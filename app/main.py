@@ -409,9 +409,12 @@ def main() -> None:
     host = os.environ.get("GRADIO_SERVER_NAME", "0.0.0.0")
     demo = build_app()
     demo.queue()
+    # Databricks Apps: bind 0.0.0.0 + PORT; disable share/tunnel checks (see gradio-hello-world-app pattern).
     demo.launch(
         server_name=host,
         server_port=port,
+        share=False,
+        inbrowser=False,
         show_api=False,
         show_error=True,
     )

@@ -33,6 +33,8 @@ llm_openai = [
 # Pin huggingface_hub with Gradio 4.44 — matches Databricks template; avoids HfFolder drift when sentence-transformers upgrades hub.
 app = [
   "gradio~=4.44.0",
+  # Must match gradio 4.44.x wheel metadata (gradio-client==1.3.0); newer client breaks api_info JSON schema parsing.
+  "gradio-client==1.3.0",
   "huggingface-hub~=0.35.3",
 ]
 
