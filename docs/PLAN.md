@@ -16,7 +16,7 @@ This document is the **canonical plan**; keep it in sync with development.
 | **Package** | [`text_utils`](../src/nyaya_dhwani/text_utils.py), [`manifest`](../src/nyaya_dhwani/manifest.py), [`embedder`](../src/nyaya_dhwani/embedder.py), [`index_builder`](../src/nyaya_dhwani/index_builder.py), [`retrieval`](../src/nyaya_dhwani/retrieval.py), [`sarvam_client`](../src/nyaya_dhwani/sarvam_client.py), [`llm_client`](../src/nyaya_dhwani/llm_client.py) |
 | **RAG index** | [`notebooks/build_rag_index.ipynb`](../notebooks/build_rag_index.ipynb) writes FAISS + Parquet + `manifest.json` under `/Volumes/main/india_legal/legal_files/nyaya_index/` |
 | **RAG smoke test** | `CorpusIndex.load` + `search` works in notebook when index + deps are installed |
-| **App UI** | **Target:** Gradio app in **Databricks Apps** — no in-repo `app/main.py` yet; UI/UX spec in [UI_design.md](UI_design.md) |
+| **App UI** | [`app/main.py`](../app/main.py) — Gradio **P0** (welcome, topics, chat); UI spec [UI_design.md](UI_design.md); deploy per [Deploy the app](#deploy-the-app-git-connected) |
 | **Stack (locked)** | **Gradio** · **Databricks Llama 4 Maverick** (`databricks-llama-4-maverick`) via Playground **Get code** / **AI Gateway** env vars ([`llm_client.py`](../src/nyaya_dhwani/llm_client.py)) · **Sarvam** for STT/TTS/translate per [UI_design.md](UI_design.md) · **FAISS on UC Volume** for retrieval until Vector Search |
 | **LLM** | [`llm_client.py`](../src/nyaya_dhwani/llm_client.py) — OpenAI-compatible chat; default model id **Maverick** — see [PLAYGROUND_TO_APP.md](PLAYGROUND_TO_APP.md) |
 | **MLflow** | Optional tracing — not required for MVP (see §8 Step 1) |
@@ -131,7 +131,8 @@ Full spec has six screens. Implement in priority order:
 | `sarvam_client.py`, `embedder.py`, `index_builder.py`, `retrieval.py`, `manifest.py` | Done |
 | `llm_client.py` | Done — OpenAI-compatible chat; Maverick via env; see [PLAYGROUND_TO_APP.md](PLAYGROUND_TO_APP.md) |
 | `pipeline.py` | Planned — optional orchestration (retrieve + Sarvam + LLM) |
-| `app/main.py` | **Target** — Gradio `Blocks`, theme/colors per [UI_design.md](UI_design.md) §Design Language |
+| `app/main.py` | **Done** — Gradio `Blocks` (P0); theme/CSS per [UI_design.md](UI_design.md) §Design Language |
+| `requirements-app.txt` | **Done** — `pip install -r requirements-app.txt` installs `-e .[rag,rag_embed,app]` |
 | `app.yaml` | **If** your workspace Apps version expects metadata in-repo; else configure start command and env only in the App UI |
 | `databricks.yml` | Optional — Asset Bundle |
 | `tests/` | Done for helpers; extend when RAG modules exist |
@@ -246,7 +247,7 @@ Product names change; use whatever your workspace lists under **AI/ML**, **Servi
 |---------------|----------------|
 | Step 2 works | Already have `llm_client.py`; set env for **Maverick** ([PLAYGROUND_TO_APP.md](PLAYGROUND_TO_APP.md)) |
 | Step 1 works | Optional `mlflow.trace` / autolog around retrieve + LLM |
-| Step 4 works | `app/main.py` — **Gradio** `Blocks` per [UI_design.md](UI_design.md) **P0** → retrieve → `llm_client` → same RAG path; optional `pipeline.py` |
+| Step 4 works | `app/main.py` — **Gradio** `Blocks` [UI_design.md](UI_design.md) **P0** (in repo); optional `pipeline.py` refactor |
 | Only Step 0 | Notebook template cell: `def ask(q): ...` using `CorpusIndex` + placeholder LLM |
 
 **Nothing here requires Vector Search** — FAISS on Volume is enough until you outgrow it.
@@ -264,7 +265,7 @@ If **Compute → Vector Search** and **Compute → Apps → Create app** are vis
 | **What** | Host a **Gradio** app in the workspace (Git-connected deploy per [Deploy the app](#deploy-the-app-git-connected)). |
 | **Fit** | **Load `CorpusIndex` from the Volume path** at startup (same as the notebook); Gradio handlers call embed → FAISS search → **Maverick** → Markdown + optional TTS. |
 | **Secrets** | `DATABRICKS_TOKEN` / `LLM_*` + `SARVAM_API_KEY` via **Secrets** or App env — no keys in git. |
-| **Next repo step** | Add `app/main.py` (+ optional `app.yaml`) per [Databricks Apps docs](https://docs.databricks.com/en/dev-tools/databricks-apps/index.html) and [UI_design.md](UI_design.md). |
+| **Next repo step** | **P1:** Sarvam STT/TTS in `app/main.py`; optional `app.yaml` per [Databricks Apps docs](https://docs.databricks.com/en/dev-tools/databricks-apps/index.html). |
 
 **Recommendation:** Ship **MVP retrieval + LLM inside an App** once `llm_client` exists; keep FAISS on Volume first — no Vector Search required.
 
@@ -315,7 +316,7 @@ For people who only **use** the deployed app (not developers):
 ## Summary
 
 **Done:** Ingestion notebook, Delta corpus, FAISS index + manifest on Volume, `nyaya_dhwani` retrieval + embedder, lazy FAISS import, Parquet-safe chunks, `llm_client` (Maverick-ready), Playground + MLflow probes, **Gradio hello-world on Databricks Apps**.  
-**Next:** Implement **`app/main.py`** per [UI_design.md](UI_design.md) **P0**; **Git-connected** App deploy; Volume **read** for `nyaya_index`; App env for `DATABRICKS_TOKEN`, `LLM_*`, `SARVAM_API_KEY`; cold-start load `CorpusIndex` + `SentenceEmbedder`. Then **P1** voice (Sarvam). **Vector Search** remains optional.
+**Next:** **Git-connected** App deploy from `main`; Volume **read** for `nyaya_index`; App env for `DATABRICKS_TOKEN`, `LLM_*`, optional `SARVAM_API_KEY` for P1. **P1:** voice + Sarvam translate/TTS in Gradio per [UI_design.md](UI_design.md). **Vector Search** remains optional.
 
 ---
 

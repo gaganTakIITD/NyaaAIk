@@ -1,0 +1,3 @@
+# Databricks App: from repository root after clone
+# pip install -r requirements-app.txt
+-e ".[rag,rag_embed,app]"

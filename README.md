@@ -33,7 +33,7 @@ Step-by-step for the Free Edition host: **[docs/WORKSPACE_SETUP.md](docs/WORKSPA
 
 ## Run and use
 
-The hackathon **MVP** in this repo is: **ingest → build a FAISS index on a Volume → retrieve chunks → call an OpenAI-compatible LLM** (Databricks Playground **Get code** / AI Gateway or another provider). There is **no in-repo Gradio/FastAPI RAG app** yet; a **Databricks App** hello-world is a separate workspace template — see [docs/PLAN.md §8–9](docs/PLAN.md#8-build-sequence--verify-your-workspace-small-pieces).
+The hackathon **MVP** in this repo is: **ingest → build a FAISS index on a Volume → retrieve chunks → call an OpenAI-compatible LLM** (Databricks Playground **Get code** / AI Gateway or another provider). The **Gradio** app lives at [`app/main.py`](app/main.py) — deploy it as a **Databricks App** from this Git repo ([docs/PLAN.md](docs/PLAN.md#deploy-the-app-git-connected)).
 
 ### MVP (latest): try in this order
 
@@ -44,7 +44,7 @@ The hackathon **MVP** in this repo is: **ingest → build a FAISS index on a Vol
 | 3 | Embeddings + FAISS + `manifest.json` on Volume | [`notebooks/build_rag_index.ipynb`](notebooks/build_rag_index.ipynb) |
 | 4 | Confirm index + `CorpusIndex.search` | Last cells of `build_rag_index` (smoke) or [local optional](#4-use-the-python-package-locally-optional) |
 | 5 | Programmatic LLM (same URL/model as Playground **Get code**) | [LLM from env](#5-llm-call-playground--ai-gateway-parity), [PLAYGROUND_TO_APP](docs/PLAYGROUND_TO_APP.md) |
-| 6 | Glue RAG + LLM in one place | In a notebook: `rag_user_message` + `chat_completions` + `extract_assistant_text` — [PLAN §2](docs/PLAN.md#2-query-path-runtime); full App: [PLAN roadmap](docs/PLAN.md#6-phases) |
+| 6 | Glue RAG + LLM | Notebook: [PLAN §2](docs/PLAN.md#2-query-path-runtime); **or** [`app/main.py`](app/main.py) + [§6 Gradio app](#6-gradio-app-databricks-apps) |
 
 Until step **4** passes, fix FAISS/NumPy pins per [§3](#3-build-the-vector-index-databricks-notebook) before investing in the app layer.
 
@@ -137,9 +137,19 @@ print(extract_assistant_text(r))
 
 (Add a system message with a **not legal advice** disclaimer in production.)
 
-### 6. Roadmap: single “app” entrypoint
+### 6. Gradio app (Databricks Apps)
 
-A **Databricks App** (**Gradio** or **FastAPI**) that chains Sarvam STT → embed → FAISS search → LLM → Sarvam TTS is described in [docs/PLAN.md](docs/PLAN.md). **Gradio hello-world on Apps** is a valid workspace starting point; wiring the same `llm_client` + `CorpusIndex` path into that app is the next in-repo step. **Workspace probes** (MLflow, LLM, Apps): [PLAN §8](docs/PLAN.md#8-build-sequence--verify-your-workspace-small-pieces). **Apps** and **Vector Search** on Free Edition: [PLAN §9](docs/PLAN.md#9-vector-search-and-apps-on-free-edition-you-have-both).
+In-repo entrypoint: [`app/main.py`](app/main.py) — welcome + language, topic chips, chat with **retrieve → Llama Maverick** (`llm_client`) + citations + disclaimer. **Install** (from repo root): `pip install -r requirements-app.txt` or `pip install -e ".[rag,rag_embed,app]"`. **Run locally** (needs index path + LLM env from Playground **Get code**):
+
+```bash
+export NYAYA_INDEX_DIR="/Volumes/main/india_legal/legal_files/nyaya_index"   # or local copy
+export LLM_OPENAI_BASE_URL="https://<workspace-id>.ai-gateway.cloud.databricks.com/mlflow/v1"
+export LLM_MODEL="databricks-llama-4-maverick"
+export DATABRICKS_TOKEN="dapi…"
+python app/main.py
+```
+
+**Deploy** on the workspace: **Compute → Apps → Create** → connect this Git repo → start command `python app/main.py` → set env per [docs/PLAYGROUND_TO_APP.md](docs/PLAYGROUND_TO_APP.md). Full flow: [docs/PLAN.md](docs/PLAN.md) ([Deploy the app](docs/PLAN.md#deploy-the-app-git-connected)). Sarvam STT/TTS is planned (P1); the Python package already has `sarvam_client` for keys-based chat checks.
 
 ---
 
