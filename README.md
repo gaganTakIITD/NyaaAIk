@@ -143,24 +143,63 @@ env:
     valueFrom: "sarvam_api_key"       # resource name in the app config
 ```
 
-**Setting up the secret resource:** In the Databricks workspace:
+**Setting up the secret resource (step-by-step):**
 
-1. Store the secret: `databricks secrets put-secret nyaya-dhwani sarvam_api_key`
-2. In **Compute → Apps → your app → Resources**, add a **Secret** resource:
-   - **Key:** `sarvam_api_key` (must match `valueFrom` in `app.yaml`)
-   - **Scope:** `nyaya-dhwani`
-   - **Secret key:** `sarvam_api_key`
-3. The app reads it as `os.environ["SARVAM_API_KEY"]` at runtime.
+Databricks Apps secret resources require **three things** to line up. If any one is missing, the env var will be empty at runtime.
+
+**Step 1 — Store the secret in the workspace:**
+
+```bash
+databricks secrets create-scope nyaya-dhwani          # one-time (skip if scope exists)
+databricks secrets put-secret nyaya-dhwani sarvam_api_key
+# paste the API key when prompted
+```
+
+**Step 2 — Add a secret resource in the app UI:**
+
+Go to **Compute → Apps → your app → Settings → Resources** and add:
+
+| Field | Value | Must match |
+|-------|-------|------------|
+| **Resource key** | `sarvam_api_key` | `valueFrom` in `app.yaml` |
+| **Resource type** | Secret | — |
+| **Secret scope** | `nyaya-dhwani` | scope from Step 1 |
+| **Secret key** | `sarvam_api_key` | key from Step 1 |
+
+**Step 3 — Map the resource to an env var in `app.yaml`:**
+
+```yaml
+env:
+  - name: "SARVAM_API_KEY"        # env var name your code reads
+    valueFrom: "sarvam_api_key"   # must match resource key from Step 2
+```
+
+**Step 4 — Redeploy** the app so the new env mapping takes effect.
+
+**Verification:** if the app logs still show `SARVAM_API_KEY missing`, check:
+- The resource key in the app UI **exactly** matches `valueFrom` in `app.yaml` (case-sensitive)
+- The secret scope and key exist: `databricks secrets list-secrets nyaya-dhwani`
+- You redeployed after adding/changing the resource
 
 **Current [`app.yaml`](app.yaml) configuration:**
 
 | Env var | Source | Notes |
 |---------|--------|-------|
-| `SARVAM_API_KEY` | `valueFrom: "sarvam_api_key"` (secret resource) | Optional — app works without Sarvam but voice/translation is disabled |
+| `SARVAM_API_KEY` | `valueFrom: "sarvam_api_key"` (secret resource) | Optional — app works without Sarvam but voice/translation/TTS is disabled |
 | `LLM_OPENAI_BASE_URL` | `value:` (plain) | AI Gateway URL — change if your workspace id differs |
 | `LLM_MODEL` | `value:` (plain) | Model name on the AI Gateway |
+| `DATABRICKS_TOKEN` | *not needed* | Databricks Apps uses OAuth M2M via the service principal — see below |
 
-**Common mistake:** adding a secret resource in the Databricks UI but forgetting the `env` mapping in `app.yaml`. The secret exists in the workspace, but the app process never sees it as an environment variable. Every secret the app needs must have a `name`/`valueFrom` entry in `app.yaml`.
+**LLM authentication on Databricks Apps:** The app calls `WorkspaceClient().config.authenticate()` from the `databricks-sdk` to get a short-lived OAuth token. This happens automatically — no PAT or `DATABRICKS_TOKEN` is needed. The service principal must have **CAN_QUERY** on the AI Gateway serving endpoint.
+
+**Common mistakes:**
+
+| Mistake | Symptom | Fix |
+|---------|---------|-----|
+| Secret resource exists but no `env` mapping in `app.yaml` | `SARVAM_API_KEY missing` in logs | Add `name`/`valueFrom` entry in `app.yaml` and redeploy |
+| Resource key doesn't match `valueFrom` | Same as above | Keys are case-sensitive — check both match exactly |
+| Forgot to redeploy after adding resource | Same as above | Redeploy from the app UI |
+| Set `DATABRICKS_TOKEN` as a static PAT | Works initially, then expires | Remove it — use SDK OAuth instead (no config needed) |
 
 #### UC Volumes are not mounted in Databricks Apps
 

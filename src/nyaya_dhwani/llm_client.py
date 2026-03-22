@@ -74,29 +74,22 @@ def _sdk_oauth_token() -> str:
     try:
         from databricks.sdk import WorkspaceClient
         w = WorkspaceClient()
-        logger.info("SDK auth_type=%s, host=%s", w.config.auth_type, w.config.host)
+        logger.debug("SDK auth_type=%s, host=%s", w.config.auth_type, w.config.host)
         # Try static token first (PAT auth).
         if w.config.token:
-            logger.info("Using static token from SDK config")
             return w.config.token
         # OAuth M2M: config.authenticate() behaviour varies by SDK version.
         result = w.config.authenticate()
-        logger.info("SDK authenticate() returned type=%s, callable=%s",
-                     type(result).__name__, callable(result))
         # Pattern 1: authenticate() returns a dict of headers directly.
         token = _extract_bearer(result)
         if token:
-            logger.info("Got OAuth token directly from authenticate() (%d chars)", len(token))
             return token
         # Pattern 2: authenticate() returns a callable header factory.
         if callable(result):
-            headers = result()
-            logger.info("header_factory() returned type=%s", type(headers).__name__)
-            token = _extract_bearer(headers)
+            token = _extract_bearer(result())
             if token:
-                logger.info("Got OAuth token from header_factory() (%d chars)", len(token))
                 return token
-        logger.warning("Could not extract Bearer token from SDK. result=%r", result)
+        logger.warning("Could not extract Bearer token from SDK (auth_type=%s)", w.config.auth_type)
     except Exception as exc:
         logger.warning("SDK OAuth token failed: %s", exc)
     return ""
