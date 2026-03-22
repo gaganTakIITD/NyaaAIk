@@ -71,20 +71,17 @@ def _sdk_oauth_token() -> str:
         if w.config.token:
             logger.info("Using static token from SDK config")
             return w.config.token
-        # OAuth: the header_factory produces {"Authorization": "Bearer <token>"}.
-        hf = w.config.authenticate
-        if callable(hf):
-            headers: dict[str, str] = {}
-            result = hf(headers)
-            # Some SDK versions return the dict, others mutate in-place.
-            if isinstance(result, dict):
-                headers = result
-            auth = headers.get("Authorization", "")
-            if auth.startswith("Bearer "):
-                logger.info("Got OAuth token from SDK (%d chars)", len(auth) - 7)
-                return auth[7:]
-            logger.warning("SDK authenticate() returned headers without Bearer: %s",
-                           list(headers.keys()))
+        # OAuth M2M: config.authenticate() returns a header factory callable.
+        # Calling that factory returns a dict like {"Authorization": "Bearer <token>"}.
+        header_factory = w.config.authenticate()
+        if callable(header_factory):
+            headers = header_factory()
+            if isinstance(headers, dict):
+                auth = headers.get("Authorization", "")
+                if auth.startswith("Bearer "):
+                    logger.info("Got OAuth token from SDK (%d chars)", len(auth) - 7)
+                    return auth[7:]
+            logger.warning("SDK header_factory returned: %s", type(headers))
     except Exception as exc:
         logger.warning("SDK OAuth token failed: %s", exc)
     return ""
