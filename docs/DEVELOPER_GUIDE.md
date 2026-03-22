@@ -205,6 +205,13 @@ env:
     value: "https://7474650313055161.ai-gateway.cloud.databricks.com/mlflow/v1"
   - name: "LLM_MODEL"
     value: "databricks-llama-4-maverick"
+  # Vector Search (primary backend, falls back to FAISS if unavailable)
+  - name: "NYAYA_RETRIEVAL_BACKEND"
+    value: "vector_search"
+  - name: "NYAYA_VS_ENDPOINT_NAME"
+    value: "nyaya_vs_endpoint"
+  - name: "NYAYA_VS_INDEX_NAME"
+    value: "main.india_legal.legal_rag_corpus_index"
 ```
 
 **What not to put in `app.yaml`:**
@@ -232,11 +239,12 @@ The booster uses regex to detect patterns like "IPC Section 413", "BNS 303(1)", 
 Run [`notebooks/setup_vector_search.py`](../notebooks/setup_vector_search.py) on a Databricks cluster:
 
 1. Creates a Standard VS endpoint (`nyaya_vs_endpoint`)
-2. Creates a Delta Sync index with managed embeddings (`databricks-bge-large-en` computes embeddings from the `text` column)
-3. Syncs the index from `main.india_legal.legal_rag_corpus`
-4. Runs a smoke test query
+2. Enables Change Data Feed on the source table (required for Delta Sync)
+3. Creates a Delta Sync index with managed embeddings (`databricks-bge-large-en` computes embeddings from the `text` column)
+4. Syncs the index from `main.india_legal.legal_rag_corpus`
+5. Runs a smoke test query
 
-Then add to `app.yaml`:
+Then add to `app.yaml` (already configured in this repo):
 
 ```yaml
 env:
@@ -248,27 +256,90 @@ env:
     value: "main.india_legal.legal_rag_corpus_index"
 ```
 
-Grant the service principal access (see permissions table below), then redeploy.
+Grant the service principal access (see permissions section below), then redeploy.
 
-**Fallback behavior:** if the VS endpoint is unavailable, the app logs a warning and falls back to FAISS automatically. No user-visible error.
+**Fallback behavior:** if the VS endpoint is unavailable or permissions are missing, the app logs a warning and falls back to FAISS automatically. No user-visible error.
+
+### Vector Search permissions (critical)
+
+This was the most error-prone part of the setup. The service principal needs permissions on **four separate resources** — missing any one causes `Insufficient permissions for UC entity` and a silent fallback to FAISS.
+
+**Step 1 — SQL grants (run in a notebook or SQL editor):**
+
+```sql
+-- Replace the service principal ID with your app's service principal
+-- Find it in: Compute → Apps → your app → the client_id in error logs
+
+GRANT USE CATALOG ON CATALOG main TO `fb088d1e-f9fe-4bd8-bea1-f5b08f943feb`;
+GRANT USE SCHEMA ON SCHEMA main.india_legal TO `fb088d1e-f9fe-4bd8-bea1-f5b08f943feb`;
+GRANT SELECT ON TABLE main.india_legal.legal_rag_corpus TO `fb088d1e-f9fe-4bd8-bea1-f5b08f943feb`;
+
+-- CRITICAL: the VS index is a separate UC entity that needs its own grant
+GRANT ALL PRIVILEGES ON TABLE main.india_legal.legal_rag_corpus_index TO `fb088d1e-f9fe-4bd8-bea1-f5b08f943feb`;
+```
+
+**Step 2 — SDK grants (run in a notebook):**
+
+The SQL `GRANT ALL PRIVILEGES` on the index may not be sufficient alone. Also grant via the SDK:
+
+```python
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.catalog import SecurableType, PermissionsChange, Privilege
+
+w = WorkspaceClient()
+w.grants.update(
+    securable_type=SecurableType.TABLE,
+    full_name="main.india_legal.legal_rag_corpus_index",
+    changes=[PermissionsChange(
+        add=[Privilege.SELECT],
+        principal="fb088d1e-f9fe-4bd8-bea1-f5b08f943feb",
+    )],
+)
+```
+
+**Step 3 — VS endpoint permission (UI):**
+
+Go to **Compute → Vector Search → `nyaya_vs_endpoint` → Permissions → Add** and grant the service principal **Can Use**.
+
+**What we learned:**
+
+| Symptom | Root cause | Fix |
+|---------|-----------|-----|
+| `Insufficient permissions for UC entity ...corpus_index` | Index is a separate UC entity from the source table | `GRANT ALL PRIVILEGES ON TABLE ...corpus_index TO <sp>` + SDK grants API |
+| SQL grants alone didn't fix it | VS index permissions need both SQL and SDK grants | Run both Step 1 and Step 2 |
+| App silently falls back to FAISS | The `FallbackRetriever` catches the permission error | Check logs for `VectorSearchRetriever.search failed` warnings |
 
 ### Embedding model note
 
 FAISS uses `all-MiniLM-L6-v2` (384 dims, run in the app). Vector Search uses `databricks-bge-large-en` (managed by Databricks, 1024 dims). The models differ but results are not mixed across backends — the fallback switches entirely, never blends scores.
 
-## Service principal permissions
+### Notebook SDK gotchas
+
+When writing the setup notebook, we hit several SDK API mismatches:
+
+| Issue | Error | Fix |
+|-------|-------|-----|
+| `endpoint_type="STANDARD"` | `'str' object has no attribute 'value'` | Use `EndpointType.STANDARD` enum |
+| `delta_sync_index_spec={...}` (dict) | `'dict' object has no attribute 'as_dict'` | Use `DeltaSyncVectorIndexSpecRequest(...)` dataclass |
+| `model_endpoint_name=` | `unexpected keyword argument` | Field is `embedding_model_endpoint_name` |
+| `results.get("result", ...)` | `'QueryVectorIndexResponse' has no attribute 'get'` | Use `results.as_dict()` first |
+| `ep.status` | `'EndpointInfo' has no attribute 'status'` | Use `getattr(ep, "status", None) or getattr(ep, "endpoint_status", None)` |
+| Missing CDF on source table | `Source delta table does not have change data feed enabled` | `ALTER TABLE ... SET TBLPROPERTIES (delta.enableChangeDataFeed = true)` |
+
+## Service principal permissions (complete list)
 
 The app's service principal needs:
 
-| Permission | Resource | Why |
-|------------|----------|-----|
-| **CAN_QUERY** | AI Gateway serving endpoint | LLM chat completions |
-| **READ** | UC Volume `main.india_legal.legal_files` | Download FAISS index at startup |
-| **READ** | Secret scope `nyaya-dhwani` | Load `sarvam_api_key` at startup |
-| **CAN_QUERY** | VS endpoint `nyaya_vs_endpoint` | Vector Search queries (only if using VS backend) |
-| **USE CATALOG** | `main` | VS needs catalog access (only if using VS backend) |
-| **USE SCHEMA** | `main.india_legal` | VS needs schema access (only if using VS backend) |
-| **SELECT** | `main.india_legal.legal_rag_corpus` | VS reads the source table (only if using VS backend) |
+| Permission | Resource | How to grant | Required for |
+|------------|----------|--------------|-------------|
+| **CAN_QUERY** | AI Gateway serving endpoint | Endpoint UI → Permissions | LLM calls (always) |
+| **READ** | UC Volume `main.india_legal.legal_files` | Catalog UI or SQL GRANT | FAISS index download |
+| **READ** | Secret scope `nyaya-dhwani` | `databricks secrets put-acl` | Sarvam API key loading |
+| **Can Use** | VS endpoint `nyaya_vs_endpoint` | Compute → Vector Search → Permissions | VS queries |
+| **USE CATALOG** | `main` | `GRANT USE CATALOG ON main TO <sp>` | VS queries |
+| **USE SCHEMA** | `main.india_legal` | `GRANT USE SCHEMA ON main.india_legal TO <sp>` | VS queries |
+| **SELECT** | `main.india_legal.legal_rag_corpus` | `GRANT SELECT ON TABLE ... TO <sp>` | VS reads source table |
+| **ALL PRIVILEGES** | `main.india_legal.legal_rag_corpus_index` | SQL GRANT + SDK grants API (both needed) | VS queries the index |
 
 ## Dependency pins
 
