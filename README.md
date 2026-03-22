@@ -141,18 +141,36 @@ print(extract_assistant_text(r))
 
 In-repo entrypoint: [`app/main.py`](app/main.py) — welcome + language, topic chips, chat with **retrieve → Llama Maverick** (`llm_client`) + citations + disclaimer. Optional **Sarvam** (same `SARVAM_API_KEY` as notebooks): **mic → STT** (Saaras, default `translate` mode for English retrieval), **Mayura** to translate typed questions to English for embedding/RAG and answers back to the session language, **Bulbul TTS** when “Read answer aloud” is checked. UI spec: [docs/UI_design.md](docs/UI_design.md).
 
-> **Databricks Apps + Gradio** — Official **Gradio on Databricks Apps** samples and dependency patterns are in **[`databricks/app-templates`](https://github.com/databricks/app-templates)** (for example [`gradio-hello-world-app`](https://github.com/databricks/app-templates/tree/main/gradio-hello-world-app), plus [`gradio-chatbot-app`](https://github.com/databricks/app-templates/tree/main/gradio-chatbot-app) / [`gradio-data-app`](https://github.com/databricks/app-templates/tree/main/gradio-data-app)). This repo aligns with those templates: root [`requirements.txt`](requirements.txt) pins **`gradio~=4.44.0`**, **`huggingface-hub~=0.35.3`**, **`pandas~=2.2.3`**, and **`gradio-client==1.3.0`** (same minor line as Gradio 4.44.x). **[`app.yaml`](app.yaml)** sets the command to `python app/main.py`. In [`app/main.py`](app/main.py), `launch()` binds **`0.0.0.0`** and **`PORT`**, and sets **`share=False`** / **`inbrowser=False`** so the hosted runtime does not rely on Gradio share links or localhost tunnel checks.
+> **Databricks Apps + Gradio** — Official **Gradio on Databricks Apps** samples and dependency patterns are in **[`databricks/app-templates`](https://github.com/databricks/app-templates)** (for example [`gradio-hello-world-app`](https://github.com/databricks/app-templates/tree/main/gradio-hello-world-app), plus [`gradio-chatbot-app`](https://github.com/databricks/app-templates/tree/main/gradio-chatbot-app) / [`gradio-data-app`](https://github.com/databricks/app-templates/tree/main/gradio-data-app)). This repo aligns with those templates: root [`requirements.txt`](requirements.txt) pins **`gradio~=4.44.0`**, **`huggingface-hub~=0.35.3`**, **`pandas~=2.2.3`**, and **`gradio-client==1.3.0`** (same minor line as Gradio 4.44.x). **[`app.yaml`](app.yaml)** sets the command to `python app/main.py`.
 
-**Install** (from repo root): `pip install -r requirements-app.txt` or `pip install -e ".[rag,rag_embed,app]"`.
+#### Gradio + Databricks Apps integration challenges
+
+Deploying a Gradio app with a **`gr.Chatbot`** component on Databricks Apps required solving two intertwined issues:
+
+1. **`gradio-client` 1.3.0 `get_api_info()` crash with `gr.Chatbot`** — The `gr.Chatbot` component (default tuple format) produces a JSON schema with `additionalProperties: true` (a JSON Schema boolean). The `gradio-client` 1.3.0 function `_json_schema_to_python_type` does not handle boolean schemas — it recurses into `True`, eventually calling `”const” in True` (`TypeError: argument of type 'bool' is not iterable`) or raising `APIInfoParseError: Cannot parse schema True`. This crash happens inside Gradio's built-in `GET /` route handler (`gradio/routes.py:api_info`), which is called even when `show_api=False`.
+
+2. **Gradio localhost health-check → `ValueError: When localhost is not accessible`** — During `demo.launch()`, Gradio sends a `HEAD http://localhost:<port>/` to verify the server started. Because the `get_api_info()` crash above causes that route to return `HTTP 500`, the health check fails repeatedly, and Gradio raises `ValueError: When localhost is not accessible, a shareable link must be created. Please set share=True`. The app never starts.
+
+**How we solved it:**
+
+- **Monkey-patch `_json_schema_to_python_type` and `get_type`** in `gradio_client.utils` at import time ([`app/main.py`](app/main.py), top of file). The patch replaces both functions at module level so that all recursive calls are also guarded — if `schema` is not a `dict` (e.g. `True`), it returns `”Any”` instead of crashing. This fixes the `GET /` route, making the health check return `200 OK`.
+
+- **Bare `demo.launch()` with no arguments** — all four official Databricks app-templates ([`gradio-hello-world-app`](https://github.com/databricks/app-templates/tree/main/gradio-hello-world-app), [`gradio-chatbot-app`](https://github.com/databricks/app-templates/tree/main/gradio-chatbot-app), [`gradio-data-app`](https://github.com/databricks/app-templates/tree/main/gradio-data-app), [`gradio-data-app-obo-user`](https://github.com/databricks/app-templates/tree/main/gradio-data-app-obo-user)) call `demo.launch()` with **zero parameters**. The Databricks Apps platform injects the correct server configuration via environment variables (`GRADIO_SERVER_NAME`, `GRADIO_SERVER_PORT`, etc.). Explicitly setting `server_name=”0.0.0.0”`, `server_port`, or `root_path` conflicts with the platform — for example, `root_path=”/”` causes Gradio to add redirect middleware that turns the health check `HEAD /` into a `307 Temporary Redirect`, which Gradio also treats as “localhost not accessible”.
+
+- **Tuple-format chat history** — `gr.Chatbot` defaults to `type=”tuples”` (pairs of `[user, assistant]`). The alternative `type=”messages”` (OpenAI-style dicts) produces an even more complex JSON schema that also triggers the `gradio-client` bug. Sticking with tuples keeps the schema simpler, and the monkey-patch handles the remaining `additionalProperties: true` edge case.
+
+> **Note:** the `gradio-chatbot-app` template avoids this bug entirely by using `gr.ChatInterface` (which internally uses a simpler schema) rather than a raw `gr.Chatbot` inside `gr.Blocks`. If you only need a basic chat UI, `gr.ChatInterface` is the safer choice on Gradio 4.44.x + `gradio-client` 1.3.0.
+
+**Install** (from repo root): `pip install -r requirements-app.txt` or `pip install -e “.[rag,rag_embed,app]”`.
 
 **Run locally** (index path + LLM env from Playground **Get code**; add Sarvam for voice/translate/TTS):
 
 ```bash
-export NYAYA_INDEX_DIR="/Volumes/main/india_legal/legal_files/nyaya_index"   # or local copy
-export LLM_OPENAI_BASE_URL="https://<workspace-id>.ai-gateway.cloud.databricks.com/mlflow/v1"
-export LLM_MODEL="databricks-llama-4-maverick"
-export DATABRICKS_TOKEN="dapi…"
-export SARVAM_API_KEY="…"   # optional: STT, Mayura, Bulbul (see PLAYGROUND_TO_APP)
+export NYAYA_INDEX_DIR=”/Volumes/main/india_legal/legal_files/nyaya_index”   # or local copy
+export LLM_OPENAI_BASE_URL=”https://<workspace-id>.ai-gateway.cloud.databricks.com/mlflow/v1”
+export LLM_MODEL=”databricks-llama-4-maverick”
+export DATABRICKS_TOKEN=”dapi…”
+export SARVAM_API_KEY=”…”   # optional: STT, Mayura, Bulbul (see PLAYGROUND_TO_APP)
 python app/main.py
 ```
 
@@ -169,7 +187,8 @@ python app/main.py
 | Secret env name | Map the Sarvam secret so the app receives **`SARVAM_API_KEY`** (resource key / env name your workspace uses for that value). |
 | LLM env | Set `DATABRICKS_TOKEN`, `LLM_OPENAI_BASE_URL`, `LLM_MODEL` in app env or secrets. |
 | `ImportError: HfFolder` from `huggingface_hub` | Pin **`huggingface-hub~=0.35.3`** with **`gradio~=4.44.0`** (see `requirements.txt` — matches the Databricks template). A newer hub (from unpinned installs) removes `HfFolder` while Gradio 4.44 still imports it. Redeploy after pull. |
-| `TypeError` in `gradio_client` (`json_schema_to_python_type`) or `ValueError` … `share=True` on startup | Often caused by **`gr.Chatbot(type="messages")`** API schemas breaking **`gradio-client` 1.3.x** plus failed health checks on `/`. This app uses **default tuple** chat history instead. If Apps logs **“Requirements have not changed”**, touch `requirements.txt` (or redeploy with **clear build**) so **`gradio-client==1.3.0`** is installed. |
+| `APIInfoParseError: Cannot parse schema True` or `TypeError: argument of type 'bool' is not iterable` on startup | Bug in `gradio-client` 1.3.0 when `gr.Chatbot` is used inside `gr.Blocks`. The monkey-patch in [`app/main.py`](app/main.py) fixes this. If you see this error, ensure you are running the latest code from `main`. |
+| `ValueError: When localhost is not accessible` | Caused by the `get_api_info()` crash above making the health check return 500. Fix the schema bug (monkey-patch) and use bare `demo.launch()` with no arguments — do **not** set `server_name`, `server_port`, or `root_path` explicitly. |
 
 ---
 
