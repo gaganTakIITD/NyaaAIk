@@ -1,0 +1,3 @@
+# Databricks Apps install step: pip install -r requirements.txt (see deploy docs).
+# Same as requirements-app.txt — editable install with RAG + Gradio extras.
+-e ".[rag,rag_embed,app]"

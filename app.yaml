@@ -1,0 +1,5 @@
+# Databricks Apps runtime — must live at the repository root.
+# https://docs.databricks.com/aws/en/dev-tools/databricks-apps/app-runtime
+#
+# Without this file, Python apps default to: python app.py (this repo uses app/main.py).
+command: ["python", "app/main.py"]
