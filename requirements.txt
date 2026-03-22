@@ -1,5 +1,6 @@
 # Databricks Apps: pip install -r requirements.txt
 # Same pins as the Databricks Gradio template (gradio + huggingface_hub + pandas).
+# cache-bust: 2026-03-22 — force reinstall if Apps skipped "Requirements have not changed"
 gradio~=4.44.0
 gradio-client==1.3.0
 huggingface-hub~=0.35.3
