@@ -18,17 +18,26 @@ import numpy as np
 
 # ---------- Monkey-patch gradio_client bug (1.3.0 + Gradio 4.44.x) ----------
 # get_api_info() crashes on Chatbot schemas where additionalProperties is True
-# (a bool), because get_type() does `"const" in schema` on a non-dict.
+# (a bool).  The internal recursive calls use the module-level name, so we must
+# replace the actual function objects in the module namespace.
 import gradio_client.utils as _gc_utils  # noqa: E402
 
+_orig_inner = _gc_utils._json_schema_to_python_type
 _orig_get_type = _gc_utils.get_type
 
-def _patched_get_type(schema):  # type: ignore[override]
+def _safe_inner(schema, defs=None):
+    if not isinstance(schema, dict):
+        return "Any"
+    return _orig_inner(schema, defs)
+
+def _safe_get_type(schema):
     if not isinstance(schema, dict):
         return "Any"
     return _orig_get_type(schema)
 
-_gc_utils.get_type = _patched_get_type
+# Patch module-level names so internal recursive calls also go through guards.
+_gc_utils._json_schema_to_python_type = _safe_inner
+_gc_utils.get_type = _safe_get_type
 # ---------- End monkey-patch ------------------------------------------------
 
 from nyaya_dhwani.embedder import SentenceEmbedder
