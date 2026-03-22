@@ -243,13 +243,9 @@ def _maybe_translate(text: str, *, source: str, target: str) -> str:
     if source == target:
         return text
     if not sarvam_configured():
-        logger.warning("_maybe_translate: sarvam not configured, returning original")
         return text
     try:
-        result = translate_text(text, source_language_code=source, target_language_code=target)
-        logger.info("_maybe_translate: %s→%s, input_len=%d, output_len=%d, same=%s",
-                     source, target, len(text), len(result), text[:50] == result[:50])
-        return result
+        return translate_text(text, source_language_code=source, target_language_code=target)
     except Exception as e:
         logger.warning("Mayura translate failed, using original: %s", e)
         return text
@@ -317,8 +313,6 @@ def build_reply_markdown(assistant_en: str, cites: str, lang: str) -> str:
         )
 
     tgt = bcp47_target(lang)
-    logger.info("Translating response: lang=%s, tgt=%s, sarvam_configured=%s, text_len=%d",
-                lang, tgt, sarvam_configured(), len(assistant_en))
     body_translated = _maybe_translate(assistant_en, source="en-IN", target=tgt)
     disc_translated = _maybe_translate(DISCLAIMER_EN, source="en-IN", target=tgt)
 
@@ -401,7 +395,7 @@ def build_app() -> gr.Blocks:
         with gr.Column(visible=True) as welcome_col:
             gr.Markdown("### Welcome")
             lang_radio = gr.Radio(
-                choices=[(c[0], c[1]) for c in SARVAM_LANGUAGES],
+                choices=[(c[1], c[0]) for c in SARVAM_LANGUAGES],  # (label, value)
                 value="en",
                 label="Select your language / अपनी भाषा चुनें",
                 info="Typed questions in other languages use **Mayura** (needs SARVAM_API_KEY). "
