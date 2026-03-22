@@ -303,25 +303,38 @@ def resolve_user_message(
 
 
 def build_reply_markdown(assistant_en: str, cites: str, lang: str) -> str:
-    """Translate answer + disclaimer when session language ≠ English and Sarvam is configured."""
-    if lang == "en" or not sarvam_configured():
-        disc = DISCLAIMER_EN
-        body = assistant_en
-    else:
-        tgt = bcp47_target(lang)
-        body = _maybe_translate(assistant_en, source="en-IN", target=tgt)
-        disc = _maybe_translate(DISCLAIMER_EN, source="en-IN", target=tgt)
+    """Build response with both English and translated text side by side."""
+    sources_block = f"**Sources (retrieval)**\n{cites}"
 
+    if lang == "en" or not sarvam_configured():
+        return (
+            f"{assistant_en}\n\n---\n{sources_block}"
+            f"\n\n---\n*{DISCLAIMER_EN}*"
+        )
+
+    tgt = bcp47_target(lang)
+    body_translated = _maybe_translate(assistant_en, source="en-IN", target=tgt)
+    disc_translated = _maybe_translate(DISCLAIMER_EN, source="en-IN", target=tgt)
+
+    # Side-by-side: translated language first (primary), English below for reference
+    lang_label = dict(SARVAM_LANGUAGES).get(lang, lang)
     return (
-        f"{body}\n\n---\n**Sources (retrieval)**\n{cites}\n\n---\n*{disc}*"
+        f"**{lang_label}:**\n\n{body_translated}\n\n"
+        f"---\n**English:**\n\n{assistant_en}\n\n"
+        f"---\n{sources_block}"
+        f"\n\n---\n*{disc_translated}*"
     )
 
 
 def maybe_tts(text_markdown: str, lang: str, enabled: bool) -> tuple[int, np.ndarray] | None:
     if not enabled or not sarvam_configured():
         return None
-    # Narrative only (before Sources); avoid reading citation list aloud
+    # Extract the translated-language block (first section before ---).
+    # For bilingual responses, this is "**Lang:**\n\n<translated text>".
     narrative = text_markdown.split("\n---\n", 1)[0]
+    # Remove the language label header (e.g. "**Kannada:**") for cleaner TTS.
+    import re
+    narrative = re.sub(r"^\*\*[^*]+:\*\*\s*", "", narrative.strip())
     plain = strip_markdown_for_tts(narrative)
     if not plain.strip():
         return None

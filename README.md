@@ -143,44 +143,39 @@ env:
     valueFrom: "sarvam_api_key"       # resource name in the app config
 ```
 
-**Setting up the secret resource (step-by-step):**
+**Setting up the Sarvam API key:**
 
-Databricks Apps secret resources are **separate from `databricks secrets` scopes**. They are configured entirely in the **Apps UI**, not via the CLI. The `valueFrom` field in `app.yaml` references a **resource key** set in the UI.
+This app uses two methods to load the `SARVAM_API_KEY`, tried in order:
 
-**Step 1 — Add a secret resource in the Apps UI:**
+1. **Environment variable** — if `SARVAM_API_KEY` is already set (e.g. locally via `.env`, or via an Apps UI resource), use it directly.
+2. **Databricks secret scope via SDK** — at startup, [`app/main.py`](app/main.py) calls `WorkspaceClient().secrets.get_secret(scope="nyaya-dhwani", key="sarvam_api_key")` to load the key from the workspace secret scope. This is the same mechanism notebooks use with `dbutils.secrets.get()`.
 
-Go to **Compute → Apps → your app → Configure** (or **Settings → Resources**) and click **+ Add resource**:
+**For Databricks Apps deployment (recommended approach):**
 
-| Field | Value | Notes |
-|-------|-------|-------|
-| **Resource type** | Secret | — |
-| **Resource key** | `sarvam_api_key` | **Must exactly match** `valueFrom` in `app.yaml`. The default key is `secret` — you must change it to `sarvam_api_key` |
-| **Secret value** | *(paste the actual API key)* | e.g. `sk_lq6ar88c_...` |
-
-> **Important:** Databricks Apps secret resources are **not** the same as `databricks secrets` (CLI secret scopes). The Apps UI has its own secret storage. Even if you stored a secret with `databricks secrets put-secret nyaya-dhwani sarvam_api_key`, the App cannot read it via `valueFrom` — you must enter the value directly in the Apps resource UI.
-
-**Step 2 — Map the resource to an env var in `app.yaml`:**
-
-```yaml
-env:
-  - name: "SARVAM_API_KEY"        # env var name your code reads
-    valueFrom: "sarvam_api_key"   # must match resource key from Step 1
+```bash
+# Store the secret in the workspace (one-time)
+databricks secrets create-scope nyaya-dhwani          # skip if scope exists
+databricks secrets put-secret nyaya-dhwani sarvam_api_key
+# paste the Sarvam API key when prompted
 ```
 
-**Step 3 — Redeploy** the app so the new env mapping takes effect.
+The app's service principal needs **READ** access to the secret scope. No `app.yaml` changes needed — the SDK loads it automatically.
 
-**Verification:** if the app logs still show `SARVAM_API_KEY missing`, check:
-- The resource key in the app UI **exactly** matches `valueFrom` in `app.yaml` (case-sensitive, no extra spaces)
-- The default key `secret` was changed to `sarvam_api_key`
-- You redeployed after adding/changing the resource
+> **Why not `app.yaml` `valueFrom`?** Databricks Apps UI secret resources (`valueFrom`) are a separate mechanism from `databricks secrets` CLI scopes. They require configuring a resource in the Apps UI with the exact key matching `valueFrom`. In practice this wiring is error-prone (wrong key name, forgot to configure in UI, etc.). Reading from the workspace secret scope via the SDK is more reliable and works the same way as notebooks.
+
+**For local development:**
+
+```bash
+export SARVAM_API_KEY="sk_..."   # or add to .env
+```
 
 **Current [`app.yaml`](app.yaml) configuration:**
 
 | Env var | Source | Notes |
 |---------|--------|-------|
-| `SARVAM_API_KEY` | `valueFrom: "sarvam_api_key"` (secret resource) | Optional — app works without Sarvam but voice/translation/TTS is disabled |
-| `LLM_OPENAI_BASE_URL` | `value:` (plain) | AI Gateway URL — change if your workspace id differs |
-| `LLM_MODEL` | `value:` (plain) | Model name on the AI Gateway |
+| `SARVAM_API_KEY` | Loaded from Databricks secret scope `nyaya-dhwani/sarvam_api_key` via SDK at startup | Optional — app works without Sarvam but voice/translation/TTS is disabled |
+| `LLM_OPENAI_BASE_URL` | `value:` in `app.yaml` | AI Gateway URL — change if your workspace id differs |
+| `LLM_MODEL` | `value:` in `app.yaml` | Model name on the AI Gateway |
 | `DATABRICKS_TOKEN` | *not needed* | Databricks Apps uses OAuth M2M via the service principal — see below |
 
 **LLM authentication on Databricks Apps:** The app calls `WorkspaceClient().config.authenticate()` from the `databricks-sdk` to get a short-lived OAuth token. This happens automatically — no PAT or `DATABRICKS_TOKEN` is needed. The service principal must have **CAN_QUERY** on the AI Gateway serving endpoint.
@@ -189,10 +184,9 @@ env:
 
 | Mistake | Symptom | Fix |
 |---------|---------|-----|
-| Used `databricks secrets` CLI instead of Apps UI secret resource | `SARVAM_API_KEY missing` — Apps can't read CLI secret scopes via `valueFrom` | Enter the secret value in the **Apps UI** under Resources |
-| Resource key is default `secret` instead of `sarvam_api_key` | Same as above — `valueFrom: "sarvam_api_key"` can't find a resource keyed as `secret` | Change the resource key in the UI to `sarvam_api_key` |
-| Secret resource exists but no `env` mapping in `app.yaml` | Same as above | Add `name`/`valueFrom` entry in `app.yaml` and redeploy |
-| Resource key doesn't match `valueFrom` | Same as above | Keys are case-sensitive — check both match exactly |
+| Secret not in workspace scope | `SARVAM_API_KEY missing` in logs | Run `databricks secrets put-secret nyaya-dhwani sarvam_api_key` |
+| Service principal can't read secret scope | Same as above | Grant READ on the `nyaya-dhwani` scope to the app's service principal |
+| Secret value stored base64-encoded | Sarvam returns 403 Forbidden | The SDK returns base64-encoded values; the app decodes automatically. If you set the env var manually, use the plain key (not base64) |
 | Forgot to redeploy after adding resource | Same as above | Redeploy from the app UI |
 | Set `DATABRICKS_TOKEN` as a static PAT | Works initially, then expires | Remove it — use SDK OAuth instead (no config needed) |
 
@@ -247,7 +241,16 @@ print(extract_assistant_text(r))
 
 ### 6. Gradio app (Databricks Apps)
 
-In-repo entrypoint: [`app/main.py`](app/main.py) — welcome + language, topic chips, chat with **retrieve → Llama Maverick** (`llm_client`) + citations + disclaimer. Optional **Sarvam** (same `SARVAM_API_KEY` as notebooks): **mic → STT** (Saaras, default `translate` mode for English retrieval), **Mayura** to translate typed questions to English for embedding/RAG and answers back to the session language, **Bulbul TTS** when “Read answer aloud” is checked. UI spec: [docs/UI_design.md](docs/UI_design.md).
+In-repo entrypoint: [`app/main.py`](app/main.py) — welcome + language selector, topic chips, chat with **retrieve → Llama Maverick** (`llm_client`) + citations + disclaimer. UI spec: [docs/UI_design.md](docs/UI_design.md).
+
+#### Multilingual support (Sarvam)
+
+When `SARVAM_API_KEY` is configured (see [§5](#5-api-keys-tokens-and-secrets)), the app supports **12 Indian languages** plus English:
+
+- **Input:** questions can be typed or spoken in any supported language. Sarvam **Mayura** translates non-English text to English for embedding/RAG. Audio input uses **Saaras STT** (default `translate` mode → English for retrieval).
+- **Bilingual responses:** when a non-English language is selected, the response shows **both the translated answer in the selected language and the original English answer** side by side, so users can verify the translation against the source.
+- **TTS:** when “Read answer aloud” is checked, **Bulbul TTS** reads the translated-language portion of the answer (not the English). The audio output language matches the selected session language.
+- **Without Sarvam:** the app still works — questions are sent as-is to RAG (degraded retrieval for non-English), responses are English only, and voice input/TTS are disabled.
 
 > **Databricks Apps + Gradio** — Official **Gradio on Databricks Apps** samples and dependency patterns are in **[`databricks/app-templates`](https://github.com/databricks/app-templates)** (for example [`gradio-hello-world-app`](https://github.com/databricks/app-templates/tree/main/gradio-hello-world-app), plus [`gradio-chatbot-app`](https://github.com/databricks/app-templates/tree/main/gradio-chatbot-app) / [`gradio-data-app`](https://github.com/databricks/app-templates/tree/main/gradio-data-app)). This repo aligns with those templates: root [`requirements.txt`](requirements.txt) pins **`gradio~=4.44.0`**, **`huggingface-hub~=0.35.3`**, **`pandas~=2.2.3`**, and **`gradio-client==1.3.0`** (same minor line as Gradio 4.44.x). **[`app.yaml`](app.yaml)** sets the command to `python app/main.py`.
 
