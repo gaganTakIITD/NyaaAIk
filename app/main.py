@@ -1,4 +1,4 @@
-"""Gradio entrypoint: RAG + Databricks Llama Maverick. Deploy on Databricks Apps (see docs/PLAN.md)."""
+"""Gradio entrypoint: RAG + Maverick + Sarvam (STT / Mayura / Bulbul). See docs/PLAN.md."""
 
 from __future__ import annotations
 
@@ -14,16 +14,26 @@ if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 import gradio as gr
+import numpy as np
 
 from nyaya_dhwani.embedder import SentenceEmbedder
 from nyaya_dhwani.llm_client import chat_completions, extract_assistant_text, rag_user_message
 from nyaya_dhwani.retrieval import CorpusIndex
+from nyaya_dhwani.sarvam_client import (
+    is_configured as sarvam_configured,
+    numpy_audio_to_wav_bytes,
+    speech_to_text_file,
+    strip_markdown_for_tts,
+    text_to_speech_wav_bytes,
+    transcript_from_stt_response,
+    translate_text,
+    wav_bytes_to_numpy_float32,
+)
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_INDEX_DIR = "/Volumes/main/india_legal/legal_files/nyaya_index"
 
-# UI_design.md — topic chips (English seed questions; P0 text path)
 TOPIC_SEEDS: dict[str, str] = {
     "Tenant rights": "What are my basic rights as a tenant in India regarding eviction and rent increases?",
     "Divorce law": "What are the grounds for divorce under Indian law for mutual consent?",
@@ -35,7 +45,6 @@ TOPIC_SEEDS: dict[str, str] = {
     "RTI": "How do I file a Right to Information application and what fees apply?",
 }
 
-# (code, label) — subset of Sarvam-supported languages; session language for future STT/TTS (P1)
 SARVAM_LANGUAGES: list[tuple[str, str]] = [
     ("en", "English"),
     ("hi", "Hindi · हिन्दी"),
@@ -52,6 +61,23 @@ SARVAM_LANGUAGES: list[tuple[str, str]] = [
     ("as", "Assamese"),
 ]
 
+# UI ISO-ish code → BCP-47 for Mayura / STT hints (best-effort for ur/as)
+UI_TO_BCP47: dict[str, str] = {
+    "en": "en-IN",
+    "hi": "hi-IN",
+    "bn": "bn-IN",
+    "te": "te-IN",
+    "mr": "mr-IN",
+    "ta": "ta-IN",
+    "gu": "gu-IN",
+    "kn": "kn-IN",
+    "ml": "ml-IN",
+    "pa": "pa-IN",
+    "or": "od-IN",
+    "ur": "hi-IN",
+    "as": "bn-IN",
+}
+
 DISCLAIMER_EN = (
     "This information is for general awareness only and does not constitute legal advice. "
     "Consult a qualified lawyer for your specific situation."
@@ -61,12 +87,17 @@ SYSTEM_PROMPT = (
     "You are Nyaya Dhwani, an assistant for Indian legal information. "
     "Answer using the Context below when it is relevant. Cite Acts or sections when the context supports it. "
     "If the context is insufficient, say so briefly. "
-    "Do not claim to be a lawyer. Keep answers clear and structured."
+    "Do not claim to be a lawyer. Keep answers clear and structured. "
+    "Respond in English."
 )
 
 
 def index_dir() -> str:
     return os.environ.get("NYAYA_INDEX_DIR", DEFAULT_INDEX_DIR).strip()
+
+
+def bcp47_target(lang: str) -> str:
+    return UI_TO_BCP47.get(lang, "en-IN")
 
 
 class RAGRuntime:
@@ -124,11 +155,11 @@ def _format_citations(chunks_df) -> str:
     return "\n".join(lines) if lines else "(no metadata)"
 
 
-def answer_question(user_text: str) -> str:
-    """Retrieve + Maverick completion + citations + disclaimer."""
+def _rag_answer_english(query_en: str) -> tuple[str, str]:
+    """LLM answer in English + citations block."""
     rt = get_runtime()
     rt.load()
-    q = user_text.strip()
+    q = query_en.strip()
     emb = rt.embedder.encode([q])
     chunks_df = rt.ci.search(emb, k=5)
     texts = chunks_df["text"].tolist() if "text" in chunks_df.columns else []
@@ -138,11 +169,124 @@ def answer_question(user_text: str) -> str:
         {"role": "user", "content": user_content},
     ]
     raw = chat_completions(messages, max_tokens=2048, temperature=0.2)
-    assistant = extract_assistant_text(raw)
+    assistant_en = extract_assistant_text(raw)
     cites = _format_citations(chunks_df)
+    return assistant_en, cites
+
+
+def _maybe_translate(text: str, *, source: str, target: str) -> str:
+    if source == target:
+        return text
+    if not sarvam_configured():
+        return text
+    try:
+        return translate_text(text, source_language_code=source, target_language_code=target)
+    except Exception as e:
+        logger.warning("Mayura translate failed, using English: %s", e)
+        return text
+
+
+def text_to_query_english(user_text: str, lang: str) -> str:
+    """Non-English typed input → English for embedding/RAG (Mayura)."""
+    t = user_text.strip()
+    if not t:
+        return t
+    if lang == "en":
+        return t
+    if not sarvam_configured():
+        logger.warning("SARVAM_API_KEY missing — using raw text for retrieval (degraded).")
+        return t
+    return _maybe_translate(t, source="auto", target="en-IN")
+
+
+def resolve_user_message(
+    text: str,
+    audio: tuple[int, np.ndarray] | None,
+    lang: str,
+) -> tuple[str, str]:
+    """Returns ``(user_bubble_text, query_english)``."""
+    text = (text or "").strip()
+    if audio is not None:
+        sr, data = audio
+        if data is not None and len(np.asarray(data)) > 0:
+            if not sarvam_configured():
+                raise RuntimeError("Set SARVAM_API_KEY for voice input (Sarvam STT).")
+            wav = numpy_audio_to_wav_bytes(np.asarray(data), int(sr))
+            mode = os.environ.get("SARVAM_STT_MODE", "translate").strip()
+            lang_hint = bcp47_target(lang) if mode == "transcribe" else None
+            st = speech_to_text_file(
+                wav,
+                mode=mode,
+                language_code=lang_hint,
+            )
+            tr = transcript_from_stt_response(st)
+            if mode == "translate":
+                return (f"🎤 {tr}", tr.strip())
+            q_en = _maybe_translate(tr, source="auto", target="en-IN")
+            return (f"🎤 {tr}", q_en.strip())
+
+    if not text:
+        raise ValueError("Type a question or record audio.")
+
+    q_en = text_to_query_english(text, lang)
+    return (text, q_en)
+
+
+def build_reply_markdown(assistant_en: str, cites: str, lang: str) -> str:
+    """Translate answer + disclaimer when session language ≠ English and Sarvam is configured."""
+    if lang == "en" or not sarvam_configured():
+        disc = DISCLAIMER_EN
+        body = assistant_en
+    else:
+        tgt = bcp47_target(lang)
+        body = _maybe_translate(assistant_en, source="en-IN", target=tgt)
+        disc = _maybe_translate(DISCLAIMER_EN, source="en-IN", target=tgt)
+
     return (
-        f"{assistant}\n\n---\n**Sources (retrieval)**\n{cites}\n\n---\n*{DISCLAIMER_EN}*"
+        f"{body}\n\n---\n**Sources (retrieval)**\n{cites}\n\n---\n*{disc}*"
     )
+
+
+def maybe_tts(text_markdown: str, lang: str, enabled: bool) -> tuple[int, np.ndarray] | None:
+    if not enabled or not sarvam_configured():
+        return None
+    # Narrative only (before Sources); avoid reading citation list aloud
+    narrative = text_markdown.split("\n---\n", 1)[0]
+    plain = strip_markdown_for_tts(narrative)
+    if not plain.strip():
+        return None
+    tgt = bcp47_target(lang)
+    try:
+        wav = text_to_speech_wav_bytes(plain, target_language_code=tgt)
+        sr, arr = wav_bytes_to_numpy_float32(wav)
+        return (sr, arr)
+    except Exception as e:
+        logger.warning("TTS failed: %s", e)
+        return None
+
+
+def run_turn(
+    message: str,
+    audio: tuple[int, np.ndarray] | None,
+    history: list | None,
+    lang: str,
+    tts_on: bool,
+) -> tuple[str, list, tuple[int, np.ndarray] | None]:
+    history = list(history) if history else []
+    try:
+        user_show, q_en = resolve_user_message(message, audio, lang)
+        assistant_en, cites = _rag_answer_english(q_en)
+        reply_md = build_reply_markdown(assistant_en, cites, lang)
+        history.append({"role": "user", "content": user_show})
+        history.append({"role": "assistant", "content": reply_md})
+        audio_out = maybe_tts(reply_md, lang, tts_on)
+        return "", history, audio_out
+    except Exception as e:
+        logger.exception("run_turn")
+        err = f"**Error:** {e}"
+        history.append({"role": "user", "content": message or "🎤 (audio)"})
+        history.append({"role": "assistant", "content": err})
+        return "", history, None
 
 
 def build_app() -> gr.Blocks:
@@ -170,12 +314,14 @@ def build_app() -> gr.Blocks:
                 choices=[(c[0], c[1]) for c in SARVAM_LANGUAGES],
                 value="en",
                 label="Select your language / अपनी भाषा चुनें",
-                info="P0: questions work best in **English** (multilingual STT/translate in P1).",
+                info="Typed questions in other languages use **Mayura** (needs SARVAM_API_KEY). "
+                "Retrieval/embeddings use English after translation.",
             )
 
             begin_btn = gr.Button("Begin / शुरू करें", variant="primary")
             gr.Markdown(
-                "<small>Not a substitute for legal counsel · General information only</small>"
+                "<small>Not a substitute for legal counsel · General information only · "
+                "Powered by Sarvam (STT / translate / TTS) when configured</small>"
             )
 
         with gr.Column(visible=False) as chat_col:
@@ -194,9 +340,23 @@ def build_app() -> gr.Blocks:
                 type="messages",
             )
             msg = gr.Textbox(
-                placeholder="Type your legal question (English recommended for P0)…",
+                placeholder="Type your legal question (any supported language if Sarvam is set)…",
                 show_label=False,
                 lines=2,
+            )
+            audio_in = gr.Audio(
+                sources=["microphone"],
+                type="numpy",
+                label="Or speak your question",
+            )
+            tts_cb = gr.Checkbox(
+                label="Read answer aloud (Sarvam Bulbul TTS)",
+                value=False,
+            )
+            tts_out = gr.Audio(
+                label="Listen to answer",
+                type="numpy",
+                interactive=False,
             )
             submit = gr.Button("Send", variant="primary")
 
@@ -224,28 +384,20 @@ def build_app() -> gr.Blocks:
 
         topic.change(fill_topic, inputs=[topic], outputs=[msg])
 
-        def chat_fn(message: str, history: list | None):
-            history = list(history) if history else []
-            if not message or not str(message).strip():
-                return "", history
-            try:
-                reply = answer_question(message)
-                history.append({"role": "user", "content": message})
-                history.append({"role": "assistant", "content": reply})
-                return "", history
-            except Exception as e:
-                logger.exception("chat_fn")
-                err = f"**Error:** {e}"
-                history.append({"role": "user", "content": message})
-                history.append({"role": "assistant", "content": err})
-                return "", history
-
-        submit.click(chat_fn, inputs=[msg, chatbot], outputs=[msg, chatbot])
-        msg.submit(chat_fn, inputs=[msg, chatbot], outputs=[msg, chatbot])
+        submit.click(
+            run_turn,
+            inputs=[msg, audio_in, chatbot, lang_state, tts_cb],
+            outputs=[msg, chatbot, tts_out],
+        )
+        msg.submit(
+            run_turn,
+            inputs=[msg, audio_in, chatbot, lang_state, tts_cb],
+            outputs=[msg, chatbot, tts_out],
+        )
 
         gr.Markdown(
-            "<small>Retrieval from your workspace index · LLM: Databricks Llama Maverick · "
-            "Sarvam voice/translate: planned (P1)</small>"
+            "<small>RAG index on UC Volume · LLM: Databricks Llama Maverick · "
+            "Sarvam: Saaras STT, Mayura translate, Bulbul TTS (`SARVAM_API_KEY`)</small>"
         )
 
     return demo

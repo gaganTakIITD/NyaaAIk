@@ -1,6 +1,6 @@
 # nyaya-dhwani-hackathon
 
-Databricks free edition experimental project for legal advice agent.
+Databricks Free Edition project: **ingest Indian legal/policy text → FAISS RAG on a Unity Catalog Volume → Gradio app** with **Databricks Llama Maverick** (AI Gateway) and optional **Sarvam** (Mayura translate, Saaras STT, Bulbul TTS). Not legal advice — see [docs/UI_design.md](docs/UI_design.md) disclaimers.
 
 ## Databricks Free Edition (use this repo with your workspace)
 
@@ -89,7 +89,7 @@ python3 -m pip install -e ".[dev,rag,rag_embed]"   # rag_embed = sentence-transf
 ```
 
 - **`nyaya_dhwani.retrieval.CorpusIndex`**: load the same `nyaya_index` directory if you copy it locally, or mount the Volume path in a future app.
-- **`nyaya_dhwani.sarvam_client`**: set `SARVAM_API_KEY` (e.g. from a local [`.env`](.env.example) — never commit secrets) before calling `chat_completions`.
+- **`nyaya_dhwani.sarvam_client`**: set `SARVAM_API_KEY` before `chat_completions`, `translate_text`, `speech_to_text_file`, or `text_to_speech_wav_bytes` (e.g. from a local [`.env`](.env.example) — never commit secrets).
 - **`nyaya_dhwani.llm_client`**: OpenAI-compatible **`chat_completions()`** (`requests`) for Databricks **AI Gateway** / Playground **Get code**; optional **`complete_with_openai_sdk()`** after `pip install -e ".[llm_openai]"`. Env vars: see [§5](#5-llm-call-playground--ai-gateway-parity) and [`.env.example`](.env.example).
 
 ### 5. LLM call (Playground / AI Gateway parity)
@@ -139,17 +139,22 @@ print(extract_assistant_text(r))
 
 ### 6. Gradio app (Databricks Apps)
 
-In-repo entrypoint: [`app/main.py`](app/main.py) — welcome + language, topic chips, chat with **retrieve → Llama Maverick** (`llm_client`) + citations + disclaimer. **Install** (from repo root): `pip install -r requirements-app.txt` or `pip install -e ".[rag,rag_embed,app]"`. **Run locally** (needs index path + LLM env from Playground **Get code**):
+In-repo entrypoint: [`app/main.py`](app/main.py) — welcome + language, topic chips, chat with **retrieve → Llama Maverick** (`llm_client`) + citations + disclaimer. Optional **Sarvam** (same `SARVAM_API_KEY` as notebooks): **mic → STT** (Saaras, default `translate` mode for English retrieval), **Mayura** to translate typed questions to English for embedding/RAG and answers back to the session language, **Bulbul TTS** when “Read answer aloud” is checked. UI spec: [docs/UI_design.md](docs/UI_design.md).
+
+**Install** (from repo root): `pip install -r requirements-app.txt` or `pip install -e ".[rag,rag_embed,app]"`.
+
+**Run locally** (index path + LLM env from Playground **Get code**; add Sarvam for voice/translate/TTS):
 
 ```bash
 export NYAYA_INDEX_DIR="/Volumes/main/india_legal/legal_files/nyaya_index"   # or local copy
 export LLM_OPENAI_BASE_URL="https://<workspace-id>.ai-gateway.cloud.databricks.com/mlflow/v1"
 export LLM_MODEL="databricks-llama-4-maverick"
 export DATABRICKS_TOKEN="dapi…"
+export SARVAM_API_KEY="…"   # optional: STT, Mayura, Bulbul (see PLAYGROUND_TO_APP)
 python app/main.py
 ```
 
-**Deploy** on the workspace: **Compute → Apps → Create** → connect this Git repo → start command `python app/main.py` → set env per [docs/PLAYGROUND_TO_APP.md](docs/PLAYGROUND_TO_APP.md). Full flow: [docs/PLAN.md](docs/PLAN.md) ([Deploy the app](docs/PLAN.md#deploy-the-app-git-connected)). Sarvam STT/TTS is planned (P1); the Python package already has `sarvam_client` for keys-based chat checks.
+**Deploy** on the workspace: **Compute → Apps → Create** → connect this Git repo → start command `python app/main.py` → set env per [docs/PLAYGROUND_TO_APP.md](docs/PLAYGROUND_TO_APP.md) (LLM + optional `SARVAM_API_KEY` + Volume read for the index). Full flow: [docs/PLAN.md](docs/PLAN.md#deploy-the-app-git-connected).
 
 ---
 
@@ -172,6 +177,7 @@ python3 -m pytest tests/ -v
 | `pytest tests/test_manifest.py -v` | `RAGManifest` JSON round-trip |
 | `pytest tests/test_index_faiss.py -v` | FAISS save/load + `CorpusIndex.search` (requires `faiss-cpu`) |
 | `pytest tests/test_llm_client.py -v` | `llm_client` URL helpers + RAG message helpers (no network) |
+| `pytest tests/test_sarvam_client.py -v` | Sarvam translation JSON parsing + WAV round-trip (no network) |
 | `pytest -k manifest` | Any test whose name contains `manifest` |
 
 Embedding-model tests are not separate files yet; FAISS roundtrip uses **random normalized vectors** (no download). To run tests that need **sentence-transformers**, install `rag_embed` and use the manual checks below.
@@ -229,7 +235,10 @@ Uncomment the middle lines when `INDEX_DIR` is valid.
 | [`notebooks/india_legal_policy_ingest.ipynb`](notebooks/india_legal_policy_ingest.ipynb) | Legal/policy ingestion → Delta tables + `legal_rag_corpus` |
 | [`notebooks/build_rag_index.ipynb`](notebooks/build_rag_index.ipynb) | Embeddings + FAISS + `manifest.json` on UC Volume (`.../nyaya_index/`) |
 | [`src/nyaya_dhwani/`](src/nyaya_dhwani/) | Package: `text_utils`, `embedder`, `index_builder`, `retrieval`, `manifest`, `sarvam_client`, `llm_client` |
-| [`docs/PLAYGROUND_TO_APP.md`](docs/PLAYGROUND_TO_APP.md) | Map Playground **Get code** → env vars → RAG answer |
+| [`app/main.py`](app/main.py) | Gradio Databricks App (RAG + Maverick + optional Sarvam) |
+| [`requirements-app.txt`](requirements-app.txt) | `pip install -r` → editable install with `rag`, `rag_embed`, `app` extras |
+| [`docs/PLAYGROUND_TO_APP.md`](docs/PLAYGROUND_TO_APP.md) | Playground **Get code** → env vars → App (LLM + Sarvam) |
+| [`docs/UI_design.md`](docs/UI_design.md) | UI/UX and Sarvam pipeline spec |
 | [`tests/`](tests/) | `pytest` — see [Testing](#testing) |
 | [`docs/PLAN.md`](docs/PLAN.md) | Product plan |
 
