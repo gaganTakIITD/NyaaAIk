@@ -245,12 +245,52 @@ In-repo entrypoint: [`app/main.py`](app/main.py) — welcome + language selector
 
 #### Multilingual support (Sarvam)
 
-When `SARVAM_API_KEY` is configured (see [§5](#5-api-keys-tokens-and-secrets)), the app supports **12 Indian languages** plus English:
+When `SARVAM_API_KEY` is configured (see [§5](#5-api-keys-tokens-and-secrets)), the app supports **12 Indian languages** plus English: Hindi, Bengali, Kannada, Tamil, Telugu, Malayalam, Marathi, Gujarati, Odia, Punjabi, Assamese, and Urdu.
 
-- **Input:** questions can be typed or spoken in any supported language. Sarvam **Mayura** translates non-English text to English for embedding/RAG. Audio input uses **Saaras STT** (default `translate` mode → English for retrieval).
-- **Bilingual responses:** when a non-English language is selected, the response shows **both the translated answer in the selected language and the original English answer** side by side, so users can verify the translation against the source.
-- **TTS:** when “Read answer aloud” is checked, **Bulbul TTS** reads the translated-language portion of the answer (not the English). The audio output language matches the selected session language.
-- **Without Sarvam:** the app still works — questions are sent as-is to RAG (degraded retrieval for non-English), responses are English only, and voice input/TTS are disabled.
+**How the translation pipeline works:**
+
+```
+User input (any language)
+  │
+  ├─ Text input ──→ Sarvam Mayura translates to English ──→ English query
+  │                                                            │
+  ├─ Audio input ──→ Sarvam Saaras STT (translate mode) ──→ English query
+  │                                                            │
+  │                  ┌─────────────────────────────────────────┘
+  │                  ▼
+  │            FAISS semantic search (English embeddings)
+  │                  │
+  │                  ▼
+  │            Databricks Llama Maverick (English RAG response)
+  │                  │
+  │                  ▼
+  │            Sarvam Mayura translates response → selected language
+  │                  │
+  │                  ▼
+  └──────────  Bilingual output:
+                 1. Selected language (translated answer)
+                 2. English (original LLM answer)
+                 3. Sources / citations
+                 4. Disclaimer (translated)
+```
+
+**Key details:**
+
+- **Language selection** happens on the welcome screen via a radio button. The selected language code (e.g. `kn` for Kannada) is stored in a Gradio `State` and used throughout the session for all translation and TTS calls.
+- **Input translation:** typed text in non-English languages is translated to English via Sarvam Mayura before being embedded for FAISS search. This ensures retrieval quality stays high regardless of input language. Audio input uses Saaras STT in `translate` mode, which outputs English directly.
+- **Bilingual responses:** the LLM always generates in English (for accuracy with English-language legal corpus). When a non-English language is selected, the response is translated back to the user's language via Mayura. Both versions are displayed — the translated answer first (under a language label), then the English original for reference.
+- **TTS:** when “Read answer aloud” is checked, Sarvam Bulbul TTS reads the **translated-language portion only** (not the English). The `target_language_code` matches the session language (e.g. `kn-IN` for Kannada).
+- **Text takes priority over audio:** if the user types text and also has a stale audio recording, the typed text is used. The audio input is cleared after each submission.
+
+**Without Sarvam (`SARVAM_API_KEY` not set):**
+
+The app still works in a degraded mode:
+- Questions are sent as-is to RAG (no translation — retrieval quality drops for non-English)
+- Responses are English only (no bilingual output)
+- Voice input is disabled (mic button shows error)
+- TTS is disabled
+
+**Gradio `Radio` choices gotcha for developers:** Gradio 4.x `Radio(choices=[(a, b)])` expects `(label, value)` — the first element is the **display label**, the second is the **stored value**. If you accidentally use `(value, label)`, the stored value will be the display name (e.g. `”Kannada”`) instead of the code (`”kn”`), and downstream lookups like `bcp47_target()` will fail silently by returning the default.
 
 > **Databricks Apps + Gradio** — Official **Gradio on Databricks Apps** samples and dependency patterns are in **[`databricks/app-templates`](https://github.com/databricks/app-templates)** (for example [`gradio-hello-world-app`](https://github.com/databricks/app-templates/tree/main/gradio-hello-world-app), plus [`gradio-chatbot-app`](https://github.com/databricks/app-templates/tree/main/gradio-chatbot-app) / [`gradio-data-app`](https://github.com/databricks/app-templates/tree/main/gradio-data-app)). This repo aligns with those templates: root [`requirements.txt`](requirements.txt) pins **`gradio~=4.44.0`**, **`huggingface-hub~=0.35.3`**, **`pandas~=2.2.3`**, and **`gradio-client==1.3.0`** (same minor line as Gradio 4.44.x). **[`app.yaml`](app.yaml)** sets the command to `python app/main.py`.
 
