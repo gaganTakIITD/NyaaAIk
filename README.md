@@ -169,6 +169,7 @@ python app/main.py
 | Secret env name | Map the Sarvam secret so the app receives **`SARVAM_API_KEY`** (resource key / env name your workspace uses for that value). |
 | LLM env | Set `DATABRICKS_TOKEN`, `LLM_OPENAI_BASE_URL`, `LLM_MODEL` in app env or secrets. |
 | `ImportError: HfFolder` from `huggingface_hub` | Pin **`huggingface-hub~=0.35.3`** with **`gradio~=4.44.0`** (see `requirements.txt` — matches the Databricks template). A newer hub (from unpinned installs) removes `HfFolder` while Gradio 4.44 still imports it. Redeploy after pull. |
+| `TypeError` in `gradio_client` (`json_schema_to_python_type`) or `ValueError` … `share=True` on startup | Often caused by **`gr.Chatbot(type="messages")`** API schemas breaking **`gradio-client` 1.3.x** plus failed health checks on `/`. This app uses **default tuple** chat history instead. If Apps logs **“Requirements have not changed”**, touch `requirements.txt` (or redeploy with **clear build**) so **`gradio-client==1.3.0`** is installed. |
 
 ---
 

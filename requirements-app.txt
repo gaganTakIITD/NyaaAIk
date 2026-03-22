@@ -1,4 +1,5 @@
 # Same pins as root requirements.txt (Databricks template).
+# cache-bust: 2026-03-22
 gradio~=4.44.0
 gradio-client==1.3.0
 huggingface-hub~=0.35.3

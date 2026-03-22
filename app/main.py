@@ -272,20 +272,20 @@ def run_turn(
     lang: str,
     tts_on: bool,
 ) -> tuple[str, list, tuple[int, np.ndarray] | None]:
-    history = list(history) if history else []
+    # Tuple pairs [[user, assistant], ...] — default Chatbot format. Avoids
+    # `type="messages"` JSON schemas that break gradio_client api_info on Gradio 4.44.x.
+    history = [list(pair) for pair in history] if history else []
     try:
         user_show, q_en = resolve_user_message(message, audio, lang)
         assistant_en, cites = _rag_answer_english(q_en)
         reply_md = build_reply_markdown(assistant_en, cites, lang)
-        history.append({"role": "user", "content": user_show})
-        history.append({"role": "assistant", "content": reply_md})
+        history.append([user_show, reply_md])
         audio_out = maybe_tts(reply_md, lang, tts_on)
         return "", history, audio_out
     except Exception as e:
         logger.exception("run_turn")
         err = f"**Error:** {e}"
-        history.append({"role": "user", "content": message or "🎤 (audio)"})
-        history.append({"role": "assistant", "content": err})
+        history.append([message or "🎤 (audio)", err])
         return "", history, None
 
 
@@ -337,7 +337,6 @@ def build_app() -> gr.Blocks:
                 label="Nyaya Dhwani",
                 height=420,
                 bubble_full_width=False,
-                type="messages",
             )
             msg = gr.Textbox(
                 placeholder="Type your legal question (any supported language if Sarvam is set)…",
