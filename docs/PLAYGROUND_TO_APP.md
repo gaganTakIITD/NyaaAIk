@@ -67,8 +67,21 @@ In the app, set `LLM_OPENAI_BASE_URL` to that same `base_url` (no trailing slash
 
 | Env / secret | Purpose |
 |--------------|---------|
-| `SARVAM_API_KEY` | Sarvam HTTP APIs (STT/TTS/chat as wired in your app). |
+| `SARVAM_API_KEY` | Same key for **chat** (`Authorization: Bearer`) and REST (**`api-subscription-key`**) on translate / STT / TTS. |
 | `NYAYA_INDEX_DIR` | **Optional** — absolute path to the FAISS index directory. If unset, use the same default as [`build_rag_index.ipynb`](../notebooks/build_rag_index.ipynb): `/Volumes/main/india_legal/legal_files/nyaya_index/`. |
+
+Optional overrides (defaults match [Sarvam docs](https://docs.sarvam.ai)):
+
+| Env | Default | Purpose |
+|-----|---------|---------|
+| `SARVAM_STT_URL` | `https://api.sarvam.ai/speech-to-text` | STT multipart upload |
+| `SARVAM_STT_MODEL` | `saaras:v3` | Saaras model id |
+| `SARVAM_STT_MODE` | `translate` | `translate` → English transcript for RAG; `transcribe` → native script then Mayura to English |
+| `SARVAM_TRANSLATE_URL` | `https://api.sarvam.ai/translate` | Mayura text translation (typed non-English → English for retrieval; English answer → session language) |
+| `SARVAM_TTS_URL` | `https://api.sarvam.ai/text-to-speech` | Bulbul TTS |
+| `SARVAM_TTS_MODEL` | `bulbul:v3` | TTS model (`bulbul:v2` also supported) |
+
+[`app/main.py`](../app/main.py) wires **STT** (mic), **Mayura** (`translate_text`), and **Bulbul** (`text_to_speech_wav_bytes`) when `SARVAM_API_KEY` is set.
 
 ---
 

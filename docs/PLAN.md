@@ -316,7 +316,7 @@ For people who only **use** the deployed app (not developers):
 ## Summary
 
 **Done:** Ingestion notebook, Delta corpus, FAISS index + manifest on Volume, `nyaya_dhwani` retrieval + embedder, lazy FAISS import, Parquet-safe chunks, `llm_client` (Maverick-ready), Playground + MLflow probes, **Gradio hello-world on Databricks Apps**.  
-**Next:** **Git-connected** App deploy from `main`; Volume **read** for `nyaya_index`; App env for `DATABRICKS_TOKEN`, `LLM_*`, optional `SARVAM_API_KEY` for P1. **P1:** voice + Sarvam translate/TTS in Gradio per [UI_design.md](UI_design.md). **Vector Search** remains optional.
+**Next:** **Git-connected** App deploy from `main`; Volume **read** for `nyaya_index`; App env for `DATABRICKS_TOKEN`, `LLM_*`, and `SARVAM_API_KEY` for STT / Mayura / Bulbul in [`app/main.py`](../app/main.py). **Vector Search** remains optional.
 
 ---
 
