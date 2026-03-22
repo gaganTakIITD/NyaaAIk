@@ -162,6 +162,31 @@ env:
 
 **Common mistake:** adding a secret resource in the Databricks UI but forgetting the `env` mapping in `app.yaml`. The secret exists in the workspace, but the app process never sees it as an environment variable. Every secret the app needs must have a `name`/`valueFrom` entry in `app.yaml`.
 
+#### UC Volumes are not mounted in Databricks Apps
+
+This is a critical difference between **notebooks/clusters** and **Databricks Apps** that catches many developers:
+
+- **On a cluster or notebook**, Unity Catalog Volumes are FUSE-mounted at `/Volumes/<catalog>/<schema>/<volume>/...`. You can read files with `open()`, `pathlib.Path`, or any library that expects local paths.
+- **On Databricks Apps**, UC Volumes are **not** FUSE-mounted. The path `/Volumes/main/india_legal/legal_files/nyaya_index/manifest.json` simply does not exist on the filesystem. You get `FileNotFoundError: [Errno 2] No such file or directory`.
+
+**How this app handles it:** [`app/main.py`](app/main.py) detects when a `/Volumes/...` path doesn't exist locally and **downloads the index files at startup** using the Databricks SDK's Files API:
+
+```python
+from databricks.sdk import WorkspaceClient
+w = WorkspaceClient()  # uses the app's service principal — no PAT needed
+for item in w.files.list_directory_contents("/Volumes/main/india_legal/legal_files/nyaya_index"):
+    with w.files.download(item.path).contents as src:
+        # write to /tmp/nyaya_index/...
+```
+
+The downloaded files are cached in `/tmp/nyaya_index` so subsequent requests don't re-download. The service principal must have **READ** permission on the UC Volume.
+
+**For other developers building Databricks Apps that read files from UC Volumes:** you must use the SDK (`WorkspaceClient().files`) or the REST API to access Volume contents. Direct filesystem paths will not work. Alternatives:
+1. **SDK download at startup** (this app's approach) — best for small/medium files (index, config, models) that can be cached in `/tmp`
+2. **Bundle files in the repo** — if the files are small enough and not sensitive
+3. **SDK streaming** — read files on demand without caching (for large files or infrequent access)
+4. **Use a SQL warehouse** — query data via `databricks-sql-connector` instead of reading files
+
 Full detail and RAG message shape: **[docs/PLAYGROUND_TO_APP.md](docs/PLAYGROUND_TO_APP.md)**.
 
 #### End-to-end MVP snippet (retrieve + generate)
@@ -223,7 +248,11 @@ export SARVAM_API_KEY=”…”   # optional: STT, Mayura, Bulbul (see PLAYGROUN
 python app/main.py
 ```
 
-**Deploy** on the workspace: **Compute → Apps → Create** → connect this Git repo → configure secrets and env as described in [§5 API keys, tokens, and secrets](#5-api-keys-tokens-and-secrets). The app's service principal needs **CAN_QUERY** on the AI Gateway endpoint. Full flow: [docs/PLAN.md](docs/PLAN.md#deploy-the-app-git-connected).
+**Deploy** on the workspace: **Compute → Apps → Create** → connect this Git repo → configure secrets and env as described in [§5 API keys, tokens, and secrets](#5-api-keys-tokens-and-secrets). The app's service principal needs:
+- **CAN_QUERY** on the AI Gateway endpoint (for LLM calls)
+- **READ** on the UC Volume `main.india_legal.legal_files` (for index download — see [§5 UC Volumes](#uc-volumes-are-not-mounted-in-databricks-apps))
+
+Full flow: [docs/PLAN.md](docs/PLAN.md#deploy-the-app-git-connected).
 
 **Entry point:** the repo includes **[`app.yaml`](app.yaml)** so Databricks runs `python app/main.py`. Without it, the default is `python app.py` in the repo root, which does not exist here — the app stays **Unavailable** with little logging. **`requirements.txt`** at the repo root is required for the Apps build step (`pip install -r requirements.txt`); it installs this package with RAG + Gradio extras.
 
@@ -236,6 +265,7 @@ python app/main.py
 | `SARVAM_API_KEY` not set despite secret existing | The secret resource must be mapped in [`app.yaml`](app.yaml) via `valueFrom` — see [§5](#5-api-keys-tokens-and-secrets). A secret in the workspace is not automatically an env var. |
 | LLM auth fails on Databricks Apps | The service principal needs **CAN_QUERY** on the AI Gateway endpoint. `DATABRICKS_TOKEN` is not needed — the app uses `databricks-sdk` OAuth. See [§5](#5-api-keys-tokens-and-secrets). |
 | LLM auth fails locally | Set `DATABRICKS_TOKEN` (PAT), `LLM_OPENAI_BASE_URL`, and `LLM_MODEL` in `.env` — see [§5](#5-api-keys-tokens-and-secrets). |
+| `FileNotFoundError: /Volumes/.../manifest.json` | UC Volumes are **not** FUSE-mounted in Databricks Apps. The app auto-downloads from the Volume via the SDK. Ensure the service principal has **READ** on the Volume. See [§5 UC Volumes](#uc-volumes-are-not-mounted-in-databricks-apps). |
 | `ImportError: HfFolder` from `huggingface_hub` | Pin **`huggingface-hub~=0.35.3`** with **`gradio~=4.44.0`** (see `requirements.txt` — matches the Databricks template). A newer hub (from unpinned installs) removes `HfFolder` while Gradio 4.44 still imports it. Redeploy after pull. |
 | `APIInfoParseError: Cannot parse schema True` or `TypeError: argument of type 'bool' is not iterable` on startup | Bug in `gradio-client` 1.3.0 when `gr.Chatbot` is used inside `gr.Blocks`. The monkey-patch in [`app/main.py`](app/main.py) fixes this. If you see this error, ensure you are running the latest code from `main`. |
 | `ValueError: When localhost is not accessible` | Caused by the `get_api_info()` crash above making the health check return 500. Fix the schema bug (monkey-patch) and use bare `demo.launch()` with no arguments — do **not** set `server_name`, `server_port`, or `root_path` explicitly. |
