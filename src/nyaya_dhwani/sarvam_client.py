@@ -32,11 +32,7 @@ DEFAULT_TTS_URL = "https://api.sarvam.ai/text-to-speech"
 
 
 def get_api_key() -> str:
-    key = os.environ.get("SARVAM_API_KEY", "").strip()
-    # TODO: remove this debug log after confirming key loads correctly
-    import logging as _logging
-    _logging.getLogger(__name__).warning("SARVAM_API_KEY: %r (len=%d)", key, len(key))
-    return key
+    return os.environ.get("SARVAM_API_KEY", "").strip()
 
 
 def is_configured() -> bool:

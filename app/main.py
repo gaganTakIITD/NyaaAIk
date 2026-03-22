@@ -259,10 +259,7 @@ def text_to_query_english(user_text: str, lang: str) -> str:
     if lang == "en":
         return t
     if not sarvam_configured():
-        _key = os.environ.get("SARVAM_API_KEY", "")
-        logger.warning("SARVAM_API_KEY missing — env value=%r (len=%d). All env keys with SARVAM: %s",
-                        _key[:8] + "…" if len(_key) > 8 else _key, len(_key),
-                        [k for k in os.environ if "SARVAM" in k.upper() or "sarvam" in k])
+        logger.warning("SARVAM_API_KEY missing — using raw text for retrieval (degraded).")
         return t
     return _maybe_translate(t, source="auto", target="en-IN")
 
@@ -501,10 +498,7 @@ def _load_secrets_from_scope() -> None:
                 except Exception:
                     decoded = val.value  # fallback: maybe it's already plain text
                 os.environ[env_var] = decoded
-                logger.info("Loaded %s from secret scope %s/%s (len=%d)",
-                            env_var, scope, key, len(decoded))
-                # TODO: remove after confirming
-                logger.warning("DEBUG %s raw=%r decoded=%r", env_var, val.value[:20], decoded[:20])
+                logger.info("Loaded %s from secret scope %s/%s", env_var, scope, key)
         except Exception as exc:
             logger.warning("Could not load %s from secret scope: %s", env_var, exc)
 

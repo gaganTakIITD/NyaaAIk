@@ -5,8 +5,8 @@
 command: ["python", "app/main.py"]
 
 env:
-  - name: "SARVAM_API_KEY"
-    valueFrom: "sarvam_api_key"
+  # SARVAM_API_KEY is loaded from Databricks secret scope at startup via SDK
+  # (see _load_secrets_from_scope in app/main.py)
   - name: "LLM_OPENAI_BASE_URL"
     value: "https://7474650313055161.ai-gateway.cloud.databricks.com/mlflow/v1"
   - name: "LLM_MODEL"
