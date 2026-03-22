@@ -166,6 +166,7 @@ python app/main.py
 | No deployment | After fixing Git or adding `app.yaml`, **Save** and **Deploy** (or redeploy) so a new build runs. |
 | Secret env name | Map the Sarvam secret so the app receives **`SARVAM_API_KEY`** (resource key / env name your workspace uses for that value). |
 | LLM env | Set `DATABRICKS_TOKEN`, `LLM_OPENAI_BASE_URL`, `LLM_MODEL` in app env or secrets. |
+| `ImportError: HfFolder` from `huggingface_hub` | Use **Gradio 5+** (declared in `pyproject.toml` `[app]`). Older Gradio + new `huggingface_hub` (from `sentence-transformers`) breaks at import. Redeploy after `git pull`. |
 
 ---
 
