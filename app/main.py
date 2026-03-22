@@ -230,6 +230,9 @@ def resolve_user_message(
 ) -> tuple[str, str]:
     """Returns ``(user_bubble_text, query_english)``."""
     text = (text or "").strip()
+    logger.info("resolve_user_message: text=%r, audio type=%s, audio=%s",
+                text[:80] if text else "", type(audio).__name__,
+                f"sr={audio[0]}, shape={np.asarray(audio[1]).shape}" if isinstance(audio, tuple) and len(audio) == 2 else repr(audio)[:120])
     if audio is not None:
         sr, data = audio
         if data is not None and len(np.asarray(data)) > 0:
