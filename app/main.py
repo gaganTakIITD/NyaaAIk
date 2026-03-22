@@ -16,6 +16,21 @@ if _SRC.is_dir() and str(_SRC) not in sys.path:
 import gradio as gr
 import numpy as np
 
+# ---------- Monkey-patch gradio_client bug (1.3.0 + Gradio 4.44.x) ----------
+# get_api_info() crashes on Chatbot schemas where additionalProperties is True
+# (a bool), because get_type() does `"const" in schema` on a non-dict.
+import gradio_client.utils as _gc_utils  # noqa: E402
+
+_orig_get_type = _gc_utils.get_type
+
+def _patched_get_type(schema):  # type: ignore[override]
+    if not isinstance(schema, dict):
+        return "Any"
+    return _orig_get_type(schema)
+
+_gc_utils.get_type = _patched_get_type
+# ---------- End monkey-patch ------------------------------------------------
+
 from nyaya_dhwani.embedder import SentenceEmbedder
 from nyaya_dhwani.llm_client import chat_completions, extract_assistant_text, rag_user_message
 from nyaya_dhwani.retrieval import CorpusIndex
@@ -412,6 +427,7 @@ def main() -> None:
     demo.launch(
         server_name=host,
         server_port=port,
+        root_path=os.environ.get("GRADIO_ROOT_PATH", "/"),
         share=False,
         inbrowser=False,
         show_api=False,
