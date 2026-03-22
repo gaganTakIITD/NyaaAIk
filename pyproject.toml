@@ -5,7 +5,8 @@ description = "Legal RAG ingestion and multilingual assistant (Databricks + Sarv
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "pandas>=2.0",
+  # Align with Databricks Apps template (stable with Gradio 4.44 + huggingface_hub).
+  "pandas~=2.2.3",
   "requests>=2.28.0",
 ]
 
@@ -29,9 +30,10 @@ llm_openai = [
   "openai>=1.30.0",
 ]
 # Gradio UI for Databricks Apps (`python app/main.py`).
-# Gradio 5.50+ removes oauth imports of HfFolder (removed in huggingface_hub; sentence-transformers pulls new hub).
+# Pin huggingface_hub with Gradio 4.44 — matches Databricks template; avoids HfFolder drift when sentence-transformers upgrades hub.
 app = [
-  "gradio>=5.50.0,<6",
+  "gradio~=4.44.0",
+  "huggingface-hub~=0.35.3",
 ]
 
 [tool.pytest.ini_options]

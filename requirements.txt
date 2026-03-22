@@ -1,4 +1,6 @@
 # Databricks Apps: pip install -r requirements.txt
-# Install Gradio first so the resolver cannot pick Gradio 4.x (HfFolder ImportError with new huggingface_hub).
-gradio>=5.50.0,<6
+# Same pins as the Databricks Gradio template (gradio + huggingface_hub + pandas).
+gradio~=4.44.0
+huggingface-hub~=0.35.3
+pandas~=2.2.3
 -e ".[rag,rag_embed,app]"
