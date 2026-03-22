@@ -1,3 +1,4 @@
-# Databricks Apps install step: pip install -r requirements.txt (see deploy docs).
-# Same as requirements-app.txt — editable install with RAG + Gradio extras.
+# Databricks Apps: pip install -r requirements.txt
+# Install Gradio first so the resolver cannot pick Gradio 4.x (HfFolder ImportError with new huggingface_hub).
+gradio>=5.50.0,<6
 -e ".[rag,rag_embed,app]"

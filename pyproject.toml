@@ -29,9 +29,9 @@ llm_openai = [
   "openai>=1.30.0",
 ]
 # Gradio UI for Databricks Apps (`python app/main.py`).
-# Gradio 5+ avoids ImportError: HfFolder (removed in newer huggingface_hub; pulled by sentence-transformers).
+# Gradio 5.50+ removes oauth imports of HfFolder (removed in huggingface_hub; sentence-transformers pulls new hub).
 app = [
-  "gradio>=5.0,<6",
+  "gradio>=5.50.0,<6",
 ]
 
 [tool.pytest.ini_options]
