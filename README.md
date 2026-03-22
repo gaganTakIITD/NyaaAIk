@@ -33,7 +33,20 @@ Step-by-step for the Free Edition host: **[docs/WORKSPACE_SETUP.md](docs/WORKSPA
 
 ## Run and use
 
-There is **no standalone HTTP app** in this repo yet (FastAPI/Gradio is [planned](docs/PLAN.md)). Today the “application” is a **Databricks notebook pipeline** plus an importable Python package for RAG building blocks.
+The hackathon **MVP** in this repo is: **ingest → build a FAISS index on a Volume → retrieve chunks → call an OpenAI-compatible LLM** (Databricks Playground **Get code** / AI Gateway or another provider). There is **no in-repo Gradio/FastAPI RAG app** yet; a **Databricks App** hello-world is a separate workspace template — see [docs/PLAN.md §8–9](docs/PLAN.md#8-build-sequence--verify-your-workspace-small-pieces).
+
+### MVP (latest): try in this order
+
+| Step | What | Where |
+|------|------|--------|
+| 1 | Auth, Repos, secrets (`nyaya-dhwani`) | [One-time setup](#1-one-time-setup), [WORKSPACE_SETUP](docs/WORKSPACE_SETUP.md) |
+| 2 | Ingest → `main.india_legal.legal_rag_corpus` | [`notebooks/india_legal_policy_ingest.ipynb`](notebooks/india_legal_policy_ingest.ipynb) |
+| 3 | Embeddings + FAISS + `manifest.json` on Volume | [`notebooks/build_rag_index.ipynb`](notebooks/build_rag_index.ipynb) |
+| 4 | Confirm index + `CorpusIndex.search` | Last cells of `build_rag_index` (smoke) or [local optional](#4-use-the-python-package-locally-optional) |
+| 5 | Programmatic LLM (same URL/model as Playground **Get code**) | [LLM from env](#5-llm-call-playground--ai-gateway-parity), [PLAYGROUND_TO_APP](docs/PLAYGROUND_TO_APP.md) |
+| 6 | Glue RAG + LLM in one place | In a notebook: `rag_user_message` + `chat_completions` + `extract_assistant_text` — [PLAN §2](docs/PLAN.md#2-query-path-runtime); full App: [PLAN roadmap](docs/PLAN.md#6-phases) |
+
+Until step **4** passes, fix FAISS/NumPy pins per [§3](#3-build-the-vector-index-databricks-notebook) before investing in the app layer.
 
 ### 1. One-time setup
 
@@ -77,10 +90,56 @@ python3 -m pip install -e ".[dev,rag,rag_embed]"   # rag_embed = sentence-transf
 
 - **`nyaya_dhwani.retrieval.CorpusIndex`**: load the same `nyaya_index` directory if you copy it locally, or mount the Volume path in a future app.
 - **`nyaya_dhwani.sarvam_client`**: set `SARVAM_API_KEY` (e.g. from a local [`.env`](.env.example) — never commit secrets) before calling `chat_completions`.
+- **`nyaya_dhwani.llm_client`**: OpenAI-compatible **`chat_completions()`** (`requests`) for Databricks **AI Gateway** / Playground **Get code**; optional **`complete_with_openai_sdk()`** after `pip install -e ".[llm_openai]"`. Env vars: see [§5](#5-llm-call-playground--ai-gateway-parity) and [`.env.example`](.env.example).
 
-### 5. Roadmap: single “app” entrypoint
+### 5. LLM call (Playground / AI Gateway parity)
 
-A **Databricks App** (**Gradio** or **FastAPI**) that chains Sarvam STT → embed → FAISS search → LLM → Sarvam TTS is described in [docs/PLAN.md](docs/PLAN.md) and [docs/PLAYGROUND_TO_APP.md](docs/PLAYGROUND_TO_APP.md). **Gradio hello-world on Apps** is a valid starting point; RAG wiring is the next step in-repo. **Workspace probes** (MLflow, LLM, Apps) to run before adding code: [PLAN §8](docs/PLAN.md#8-build-sequence--verify-your-workspace-small-pieces). If your workspace shows **Apps** and **Vector Search** (Free Edition often does), see [PLAN §9](docs/PLAN.md#9-vector-search-and-apps-on-free-edition-you-have-both) for how they fit vs FAISS-on-Volume.
+After **Playground** works for you, use **Get code** to copy `base_url`, model id, and token pattern. Map them to env (Databricks **Secrets** on jobs/apps, or local `.env` only — never commit):
+
+| Variable | Typical use |
+|----------|-------------|
+| `DATABRICKS_TOKEN` | PAT or token from Get code |
+| `LLM_OPENAI_BASE_URL` | Same as SDK `base_url`, e.g. `https://<workspace-id>.ai-gateway.cloud.databricks.com/mlflow/v1` (no trailing slash) |
+| `LLM_MODEL` | e.g. `databricks-llama-4-maverick` or the model id from Get code |
+
+Full detail and RAG message shape: **[docs/PLAYGROUND_TO_APP.md](docs/PLAYGROUND_TO_APP.md)**.
+
+**Smoke test (local or notebook, after `pip install -e .`):**
+
+```bash
+export DATABRICKS_TOKEN="dapi…"
+export LLM_OPENAI_BASE_URL="https://<workspace-id>.ai-gateway.cloud.databricks.com/mlflow/v1"
+export LLM_MODEL="databricks-llama-4-maverick"
+python3 -c "
+from nyaya_dhwani.llm_client import chat_completions, extract_assistant_text
+r = chat_completions([{'role':'user','content':'Reply with one word: OK.'}], max_tokens=32)
+print(extract_assistant_text(r))
+"
+```
+
+**End-to-end MVP snippet (retrieve + generate)** — run where the index path is readable and `rag` + `rag_embed` are installed. Use the **same** embedding model id as in `manifest.json` (pass `SentenceEmbedder(model_name=...)` if you overrode the default at index build).
+
+```python
+from nyaya_dhwani.embedder import SentenceEmbedder
+from nyaya_dhwani.retrieval import CorpusIndex
+from nyaya_dhwani.llm_client import chat_completions, extract_assistant_text, rag_user_message
+
+INDEX_DIR = "/Volumes/main/india_legal/legal_files/nyaya_index"  # or a local copy
+q = "What is theft under BNS?"
+e = SentenceEmbedder()  # must match manifest embedding_model
+ci = CorpusIndex.load(INDEX_DIR)
+chunks = ci.search(e.encode([q]), k=5)
+texts = chunks["text"].tolist()
+msg = rag_user_message(texts, q)
+r = chat_completions([{"role": "user", "content": msg}], max_tokens=2048)
+print(extract_assistant_text(r))
+```
+
+(Add a system message with a **not legal advice** disclaimer in production.)
+
+### 6. Roadmap: single “app” entrypoint
+
+A **Databricks App** (**Gradio** or **FastAPI**) that chains Sarvam STT → embed → FAISS search → LLM → Sarvam TTS is described in [docs/PLAN.md](docs/PLAN.md). **Gradio hello-world on Apps** is a valid workspace starting point; wiring the same `llm_client` + `CorpusIndex` path into that app is the next in-repo step. **Workspace probes** (MLflow, LLM, Apps): [PLAN §8](docs/PLAN.md#8-build-sequence--verify-your-workspace-small-pieces). **Apps** and **Vector Search** on Free Edition: [PLAN §9](docs/PLAN.md#9-vector-search-and-apps-on-free-edition-you-have-both).
 
 ---
 
@@ -102,6 +161,7 @@ python3 -m pytest tests/ -v
 | `pytest tests/test_text_utils.py -v` | Column cleaning (`text_utils.clean_cols`) |
 | `pytest tests/test_manifest.py -v` | `RAGManifest` JSON round-trip |
 | `pytest tests/test_index_faiss.py -v` | FAISS save/load + `CorpusIndex.search` (requires `faiss-cpu`) |
+| `pytest tests/test_llm_client.py -v` | `llm_client` URL helpers + RAG message helpers (no network) |
 | `pytest -k manifest` | Any test whose name contains `manifest` |
 
 Embedding-model tests are not separate files yet; FAISS roundtrip uses **random normalized vectors** (no download). To run tests that need **sentence-transformers**, install `rag_embed` and use the manual checks below.
