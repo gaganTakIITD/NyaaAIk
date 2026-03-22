@@ -86,6 +86,18 @@ display(spark.table(SOURCE_TABLE).limit(3))
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## 4b. Enable Change Data Feed
+# MAGIC
+# MAGIC Delta Sync indexes require Change Data Feed (CDF) on the source table.
+
+# COMMAND ----------
+
+spark.sql(f"ALTER TABLE {SOURCE_TABLE} SET TBLPROPERTIES (delta.enableChangeDataFeed = true)")
+print(f"Change Data Feed enabled on {SOURCE_TABLE}")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## 5. Create Delta Sync Index with Managed Embeddings
 # MAGIC
 # MAGIC The index auto-computes embeddings from the `text` column using
