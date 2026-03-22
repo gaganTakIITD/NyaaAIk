@@ -69,11 +69,11 @@ Use the workspace wizard to deploy this repo as a [Databricks App](https://docs.
 2. **Name** the app (e.g. `nyaya-dhwani`).
 3. **Connect this Git repository** — point at the same Git remote as the hackathon repo (clone via **Databricks Repos** first, or connect GitHub/GitLab with OAuth or PAT per [WORKSPACE_SETUP.md](WORKSPACE_SETUP.md)); choose branch (e.g. `main`).
 4. **Configure the app**
-   - **Start command** — once `app/main.py` exists: e.g. `python app/main.py` or `python -m app.main` so Gradio `launch()` runs (match whatever the Apps template expects for Python/Gradio).
+   - **Start command** — declared in repo-root [`app.yaml`](../app.yaml) as `python app/main.py` (Databricks default without `app.yaml` is `python app.py`, which does not exist in this repo).
+   - **Dependencies** — repo-root [`requirements.txt`](../requirements.txt) pins the stack via `pip install -e ".[rag,rag_embed,app]"` (`faiss-cpu` 1.7.x, `numpy<2`, `sentence-transformers`, `gradio`, etc.).
    - **Working directory** — usually repo root so `src/nyaya_dhwani` is importable; set explicitly if your layout differs.
    - **Environment variables / secrets** — no keys in git. Map the same variables as [PLAYGROUND_TO_APP.md](PLAYGROUND_TO_APP.md): `DATABRICKS_TOKEN` (or `LLM_API_KEY`), `LLM_OPENAI_BASE_URL`, `LLM_MODEL=databricks-llama-4-maverick`, `SARVAM_API_KEY` (from scope `nyaya-dhwani` / `sarvam_api_key` or direct App env). Optionally `NYAYA_INDEX_DIR` if the app reads index path from env (default: notebook output path below).
    - **Unity Catalog** — grant the App’s service principal (or identity) **read** on the Volume folder containing the index, e.g. `/Volumes/main/india_legal/legal_files/nyaya_index/`.
-   - **Dependencies** — App build must install packages compatible with the index pipeline: e.g. `faiss-cpu` 1.7.x, `numpy<2`, `sentence-transformers`, plus `gradio` and `requests` (see [README.md](../README.md) notebook pins).
 
 **Prerequisites before deploy:** §8 Step **0** (ingest + `build_rag_index`) complete; Step **2** (LLM **Get code** with Maverick) works in a notebook; Step **4** (Apps) available; secrets populated.
 
@@ -132,8 +132,8 @@ Full spec has six screens. Implement in priority order:
 | `llm_client.py` | Done — OpenAI-compatible chat; Maverick via env; see [PLAYGROUND_TO_APP.md](PLAYGROUND_TO_APP.md) |
 | `pipeline.py` | Planned — optional orchestration (retrieve + Sarvam + LLM) |
 | `app/main.py` | **Done** — Gradio `Blocks` (P0); theme/CSS per [UI_design.md](UI_design.md) §Design Language |
-| `requirements-app.txt` | **Done** — `pip install -r requirements-app.txt` installs `-e .[rag,rag_embed,app]` |
-| `app.yaml` | **If** your workspace Apps version expects metadata in-repo; else configure start command and env only in the App UI |
+| `requirements.txt` | **Done** — Databricks Apps `pip install -r requirements.txt` (same pins as `requirements-app.txt`) |
+| `app.yaml` | **Done** — `command: [python, app/main.py]` (overrides default `python app.py`) |
 | `databricks.yml` | Optional — Asset Bundle |
 | `tests/` | Done for helpers; extend when RAG modules exist |
 

@@ -154,7 +154,18 @@ export SARVAM_API_KEY="…"   # optional: STT, Mayura, Bulbul (see PLAYGROUND_TO
 python app/main.py
 ```
 
-**Deploy** on the workspace: **Compute → Apps → Create** → connect this Git repo → start command `python app/main.py` → set env per [docs/PLAYGROUND_TO_APP.md](docs/PLAYGROUND_TO_APP.md) (LLM + optional `SARVAM_API_KEY` + Volume read for the index). Full flow: [docs/PLAN.md](docs/PLAN.md#deploy-the-app-git-connected).
+**Deploy** on the workspace: **Compute → Apps → Create** → connect this Git repo → set env per [docs/PLAYGROUND_TO_APP.md](docs/PLAYGROUND_TO_APP.md) (LLM + optional `SARVAM_API_KEY` + Volume read for the index). Full flow: [docs/PLAN.md](docs/PLAN.md#deploy-the-app-git-connected).
+
+**Entry point:** the repo includes **[`app.yaml`](app.yaml)** so Databricks runs `python app/main.py`. Without it, the default is `python app.py` in the repo root, which does not exist here — the app stays **Unavailable** with little logging. **`requirements.txt`** at the repo root is required for the Apps build step (`pip install -r requirements.txt`); it installs this package with RAG + Gradio extras.
+
+**Troubleshooting “Unavailable” / “No source code”**
+
+| Issue | What to do |
+|-------|------------|
+| Wrong Git URL | Use the exact repo URL (e.g. `https://github.com/shwethab/nyaya-dhwani-hackathon`) — avoid a truncated URL ending in `-`. |
+| No deployment | After fixing Git or adding `app.yaml`, **Save** and **Deploy** (or redeploy) so a new build runs. |
+| Secret env name | Map the Sarvam secret so the app receives **`SARVAM_API_KEY`** (resource key / env name your workspace uses for that value). |
+| LLM env | Set `DATABRICKS_TOKEN`, `LLM_OPENAI_BASE_URL`, `LLM_MODEL` in app env or secrets. |
 
 ---
 
@@ -236,7 +247,9 @@ Uncomment the middle lines when `INDEX_DIR` is valid.
 | [`notebooks/build_rag_index.ipynb`](notebooks/build_rag_index.ipynb) | Embeddings + FAISS + `manifest.json` on UC Volume (`.../nyaya_index/`) |
 | [`src/nyaya_dhwani/`](src/nyaya_dhwani/) | Package: `text_utils`, `embedder`, `index_builder`, `retrieval`, `manifest`, `sarvam_client`, `llm_client` |
 | [`app/main.py`](app/main.py) | Gradio Databricks App (RAG + Maverick + optional Sarvam) |
-| [`requirements-app.txt`](requirements-app.txt) | `pip install -r` → editable install with `rag`, `rag_embed`, `app` extras |
+| [`requirements.txt`](requirements.txt) | Databricks Apps `pip install` (same content as `requirements-app.txt`) |
+| [`app.yaml`](app.yaml) | Declares `python app/main.py` for Databricks Apps (overrides default `python app.py`) |
+| [`requirements-app.txt`](requirements-app.txt) | Alias / local installs: `pip install -r requirements-app.txt` |
 | [`docs/PLAYGROUND_TO_APP.md`](docs/PLAYGROUND_TO_APP.md) | Playground **Get code** → env vars → App (LLM + Sarvam) |
 | [`docs/UI_design.md`](docs/UI_design.md) | UI/UX and Sarvam pipeline spec |
 | [`tests/`](tests/) | `pytest` — see [Testing](#testing) |
