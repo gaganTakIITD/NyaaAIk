@@ -56,12 +56,20 @@ def _bearer() -> str:
     return _sdk_oauth_token()
 
 
+def _extract_bearer(obj) -> str:
+    """Extract Bearer token from a dict-like object."""
+    if isinstance(obj, dict):
+        auth = obj.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            return auth[7:]
+    return ""
+
+
 def _sdk_oauth_token() -> str:
     """Get a fresh OAuth token from the Databricks SDK (service principal auth).
 
     On Databricks Apps, the service principal uses OAuth M2M — there is no
     static PAT.  ``WorkspaceClient().config.token`` is ``None`` in that case.
-    We call the SDK's internal token provider to get a short-lived token.
     """
     try:
         from databricks.sdk import WorkspaceClient
@@ -71,17 +79,24 @@ def _sdk_oauth_token() -> str:
         if w.config.token:
             logger.info("Using static token from SDK config")
             return w.config.token
-        # OAuth M2M: config.authenticate() returns a header factory callable.
-        # Calling that factory returns a dict like {"Authorization": "Bearer <token>"}.
-        header_factory = w.config.authenticate()
-        if callable(header_factory):
-            headers = header_factory()
-            if isinstance(headers, dict):
-                auth = headers.get("Authorization", "")
-                if auth.startswith("Bearer "):
-                    logger.info("Got OAuth token from SDK (%d chars)", len(auth) - 7)
-                    return auth[7:]
-            logger.warning("SDK header_factory returned: %s", type(headers))
+        # OAuth M2M: config.authenticate() behaviour varies by SDK version.
+        result = w.config.authenticate()
+        logger.info("SDK authenticate() returned type=%s, callable=%s",
+                     type(result).__name__, callable(result))
+        # Pattern 1: authenticate() returns a dict of headers directly.
+        token = _extract_bearer(result)
+        if token:
+            logger.info("Got OAuth token directly from authenticate() (%d chars)", len(token))
+            return token
+        # Pattern 2: authenticate() returns a callable header factory.
+        if callable(result):
+            headers = result()
+            logger.info("header_factory() returned type=%s", type(headers).__name__)
+            token = _extract_bearer(headers)
+            if token:
+                logger.info("Got OAuth token from header_factory() (%d chars)", len(token))
+                return token
+        logger.warning("Could not extract Bearer token from SDK. result=%r", result)
     except Exception as exc:
         logger.warning("SDK OAuth token failed: %s", exc)
     return ""
