@@ -274,7 +274,7 @@ def resolve_user_message(
             q_en = _maybe_translate(tr, source="auto", target="en-IN")
             return (f"🎤 {tr}", q_en.strip())
 
-    raise ValueError("Type a question or record audio.")
+    raise ValueError("Type a question or record audio. If you just recorded, wait for the audio to finish processing then try again.")
 
 
 def build_reply_markdown(assistant_en: str, cites: str, lang: str) -> str:
@@ -442,16 +442,15 @@ def build_app() -> gr.Blocks:
 
         topic.change(fill_topic, inputs=[topic], outputs=[msg])
 
-        submit.click(
-            run_turn,
+        _run_turn_io = dict(
+            fn=run_turn,
             inputs=[msg, audio_in, chatbot, lang_state, tts_cb],
             outputs=[msg, chatbot, tts_out, audio_in],
         )
-        msg.submit(
-            run_turn,
-            inputs=[msg, audio_in, chatbot, lang_state, tts_cb],
-            outputs=[msg, chatbot, tts_out, audio_in],
-        )
+        submit.click(**_run_turn_io)
+        msg.submit(**_run_turn_io)
+        # Auto-submit when the user stops recording (so they don't need to click Send).
+        audio_in.stop_recording(**_run_turn_io)
 
         gr.Markdown(
             "<small>RAG index on UC Volume · LLM: Databricks Llama Maverick · "
