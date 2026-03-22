@@ -419,20 +419,11 @@ def build_app() -> gr.Blocks:
 
 def main() -> None:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
-    port = int(os.environ.get("PORT", "7860"))
-    host = os.environ.get("GRADIO_SERVER_NAME", "0.0.0.0")
     demo = build_app()
     demo.queue()
-    # Databricks Apps: bind 0.0.0.0 + PORT; disable share/tunnel checks (see gradio-hello-world-app pattern).
-    demo.launch(
-        server_name=host,
-        server_port=port,
-        root_path=os.environ.get("GRADIO_ROOT_PATH", "/"),
-        share=False,
-        inbrowser=False,
-        show_api=False,
-        show_error=True,
-    )
+    # Match Databricks app-templates: bare launch() lets the platform
+    # inject GRADIO_SERVER_NAME, GRADIO_SERVER_PORT, GRADIO_ROOT_PATH etc.
+    demo.launch()
 
 
 if __name__ == "__main__":
