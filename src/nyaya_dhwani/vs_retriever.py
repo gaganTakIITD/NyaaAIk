@@ -6,6 +6,7 @@ and supports hybrid search + metadata filters for IPC/BNS section lookups.
 
 from __future__ import annotations
 
+import json
 import logging
 
 import pandas as pd
@@ -25,28 +26,25 @@ class VectorSearchRetriever:
         self._index_name = index_name
         self._index = None
 
-    def _get_index(self):
+    def _get_client(self):
+        """Return the vector_search_indexes API client (not the index object)."""
         if self._index is not None:
             return self._index
         from databricks.sdk import WorkspaceClient
-        w = WorkspaceClient()
-        self._index = w.vector_search_indexes.get_index(self._index_name)
-        logger.info("VectorSearchRetriever: connected to index %s on endpoint %s",
-                     self._index_name, self._endpoint_name)
+        self._index = WorkspaceClient().vector_search_indexes
+        logger.info("VectorSearchRetriever: connected to endpoint %s, index %s",
+                     self._endpoint_name, self._index_name)
         return self._index
 
     def search(self, query: str, k: int = 7) -> pd.DataFrame:
         """Similarity search with optional metadata filters for section references."""
-        index = self._get_index()
+        client = self._get_client()
+        index_name = self._index_name
 
         # Detect IPC/BNS section references for targeted filtering.
         refs = detect_section_references(query)
         filters = None
-        num_results = k
         if refs:
-            # Request extra results so we can mix mapping chunks with section chunks.
-            num_results = k + 3
-            # Filter to boost mapping chunks when specific sections are mentioned.
             filters = {"doc_type": "law_mapping"}
 
         try:
@@ -54,18 +52,20 @@ class VectorSearchRetriever:
             mapping_rows = []
             if filters:
                 try:
-                    mapping_resp = index.similarity_search(
+                    mapping_resp = client.query_index(
+                        index_name=index_name,
                         columns=_RESULT_COLUMNS,
                         query_text=query,
                         num_results=3,
-                        filters=filters,
+                        filters_json=json.dumps(filters),
                     )
                     mapping_rows = _response_to_rows(mapping_resp)
                 except Exception:
                     logger.debug("Filtered VS search failed, continuing with unfiltered", exc_info=True)
 
             # Main unfiltered search.
-            resp = index.similarity_search(
+            resp = client.query_index(
+                index_name=index_name,
                 columns=_RESULT_COLUMNS,
                 query_text=query,
                 num_results=k,
@@ -96,10 +96,12 @@ class VectorSearchRetriever:
 
 
 def _response_to_rows(resp) -> list[dict]:
-    """Convert a VS similarity_search response to a list of dicts."""
+    """Convert a VS similarity_search/query_index response to a list of dicts."""
     rows = []
-    # The response format depends on the SDK version.
-    # Typically: {"manifest": {"columns": [...]}, "result": {"data_array": [[...], ...]}}
+    # The SDK may return a dataclass or a dict depending on version.
+    # Convert to dict first if possible.
+    if hasattr(resp, "as_dict"):
+        resp = resp.as_dict()
     try:
         manifest = resp.get("manifest", {}) if isinstance(resp, dict) else getattr(resp, "manifest", {})
         result = resp.get("result", {}) if isinstance(resp, dict) else getattr(resp, "result", {})

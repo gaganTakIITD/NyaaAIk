@@ -180,8 +180,15 @@ results = w.vector_search_indexes.query_index(
     num_results=5,
 )
 
-print(f"\nResults ({len(results.get('result', {}).get('data_array', []))} rows):")
-for row in results.get("result", {}).get("data_array", []):
+# Response is a dataclass — use as_dict() to get a plain dict, or access attributes directly.
+resp = results.as_dict() if hasattr(results, "as_dict") else results
+if isinstance(resp, dict):
+    data_array = resp.get("result", {}).get("data_array", [])
+else:
+    data_array = getattr(getattr(resp, "result", None), "data_array", []) or []
+
+print(f"\nResults ({len(data_array)} rows):")
+for row in data_array:
     print(f"  {row[0]}: {row[2]} ({row[3]})")
 
 # COMMAND ----------
