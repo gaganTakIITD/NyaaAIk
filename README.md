@@ -92,24 +92,31 @@ python3 -m pip install -e ".[dev,rag,rag_embed]"   # rag_embed = sentence-transf
 - **`nyaya_dhwani.sarvam_client`**: set `SARVAM_API_KEY` before `chat_completions`, `translate_text`, `speech_to_text_file`, or `text_to_speech_wav_bytes` (e.g. from a local [`.env`](.env.example) — never commit secrets).
 - **`nyaya_dhwani.llm_client`**: OpenAI-compatible **`chat_completions()`** (`requests`) for Databricks **AI Gateway** / Playground **Get code**; optional **`complete_with_openai_sdk()`** after `pip install -e ".[llm_openai]"`. Env vars: see [§5](#5-llm-call-playground--ai-gateway-parity) and [`.env.example`](.env.example).
 
-### 5. LLM call (Playground / AI Gateway parity)
+### 5. API keys, tokens, and secrets
 
-After **Playground** works for you, use **Get code** to copy `base_url`, model id, and token pattern. Map them to env (Databricks **Secrets** on jobs/apps, or local `.env` only — never commit):
+The app needs credentials for the **LLM** (Databricks AI Gateway) and optionally **Sarvam** (STT, translation, TTS). How you provide them depends on whether you run locally or as a Databricks App.
 
-| Variable | Typical use |
-|----------|-------------|
-| `DATABRICKS_TOKEN` | PAT or token from Get code |
-| `LLM_OPENAI_BASE_URL` | Same as SDK `base_url`, e.g. `https://<workspace-id>.ai-gateway.cloud.databricks.com/mlflow/v1` (no trailing slash) |
-| `LLM_MODEL` | e.g. `databricks-llama-4-maverick` or the model id from Get code |
+#### Environment variables reference
 
-Full detail and RAG message shape: **[docs/PLAYGROUND_TO_APP.md](docs/PLAYGROUND_TO_APP.md)**.
+| Variable | Required? | What it does | Where to get it |
+|----------|-----------|--------------|-----------------|
+| `LLM_OPENAI_BASE_URL` | Yes | AI Gateway base URL (OpenAI-compatible) | Playground → **Get code** → `base_url`. This repo uses `https://7474650313055161.ai-gateway.cloud.databricks.com/mlflow/v1` |
+| `LLM_MODEL` | Yes | Model id for chat completions | Playground → **Get code** → model name. This repo uses `databricks-llama-4-maverick` |
+| `DATABRICKS_TOKEN` | Local only | PAT or token from **Get code** | Workspace → **User Settings → Developer → Access tokens**. **Not needed on Databricks Apps** — see below |
+| `SARVAM_API_KEY` | Optional | Sarvam REST API key (STT, Mayura translate, Bulbul TTS) | [dashboard.sarvam.ai](https://dashboard.sarvam.ai) |
+| `NYAYA_INDEX_DIR` | Yes | Path to the FAISS index directory | Output of [`notebooks/build_rag_index.ipynb`](notebooks/build_rag_index.ipynb), default `/Volumes/main/india_legal/legal_files/nyaya_index` |
+| `LLM_CHAT_COMPLETIONS_URL` | No | Full POST URL override (skips base URL + `/chat/completions` construction) | Only if your endpoint doesn't follow the OpenAI `/v1/chat/completions` pattern |
 
-**Smoke test (local or notebook, after `pip install -e .`):**
+#### Local development
+
+Copy [`.env.example`](.env.example) to `.env`, fill in values, and source it (or use a tool like `direnv`). **Never commit `.env`**.
 
 ```bash
-export DATABRICKS_TOKEN="dapi…"
-export LLM_OPENAI_BASE_URL="https://<workspace-id>.ai-gateway.cloud.databricks.com/mlflow/v1"
-export LLM_MODEL="databricks-llama-4-maverick"
+cp .env.example .env
+# Edit .env with your values, then:
+export $(grep -v '^#' .env | xargs)
+
+# Smoke test:
 python3 -c "
 from nyaya_dhwani.llm_client import chat_completions, extract_assistant_text
 r = chat_completions([{'role':'user','content':'Reply with one word: OK.'}], max_tokens=32)
@@ -117,7 +124,49 @@ print(extract_assistant_text(r))
 "
 ```
 
-**End-to-end MVP snippet (retrieve + generate)** — run where the index path is readable and `rag` + `rag_embed` are installed. Use the **same** embedding model id as in `manifest.json` (pass `SentenceEmbedder(model_name=...)` if you overrode the default at index build).
+#### Databricks Apps deployment
+
+On Databricks Apps, credentials work differently from local dev:
+
+**LLM authentication (no PAT needed):** Databricks Apps runs your code as a **service principal**. The app uses `databricks-sdk` (`WorkspaceClient()`) to get an OAuth token automatically — you do **not** need to set `DATABRICKS_TOKEN`. The service principal must have **CAN_QUERY** permission on the AI Gateway endpoint (grant this in the workspace UI under the endpoint's permissions).
+
+**Secrets vs. plain env vars:** Databricks Apps supports two ways to pass env vars in [`app.yaml`](app.yaml):
+
+```yaml
+env:
+  # Plain value — visible in app.yaml (fine for non-secret config)
+  - name: "LLM_OPENAI_BASE_URL"
+    value: "https://7474650313055161.ai-gateway.cloud.databricks.com/mlflow/v1"
+
+  # Secret — references a Databricks secret resource (for API keys)
+  - name: "SARVAM_API_KEY"
+    valueFrom: "sarvam_api_key"       # resource name in the app config
+```
+
+**Setting up the secret resource:** In the Databricks workspace:
+
+1. Store the secret: `databricks secrets put-secret nyaya-dhwani sarvam_api_key`
+2. In **Compute → Apps → your app → Resources**, add a **Secret** resource:
+   - **Key:** `sarvam_api_key` (must match `valueFrom` in `app.yaml`)
+   - **Scope:** `nyaya-dhwani`
+   - **Secret key:** `sarvam_api_key`
+3. The app reads it as `os.environ["SARVAM_API_KEY"]` at runtime.
+
+**Current [`app.yaml`](app.yaml) configuration:**
+
+| Env var | Source | Notes |
+|---------|--------|-------|
+| `SARVAM_API_KEY` | `valueFrom: "sarvam_api_key"` (secret resource) | Optional — app works without Sarvam but voice/translation is disabled |
+| `LLM_OPENAI_BASE_URL` | `value:` (plain) | AI Gateway URL — change if your workspace id differs |
+| `LLM_MODEL` | `value:` (plain) | Model name on the AI Gateway |
+
+**Common mistake:** adding a secret resource in the Databricks UI but forgetting the `env` mapping in `app.yaml`. The secret exists in the workspace, but the app process never sees it as an environment variable. Every secret the app needs must have a `name`/`valueFrom` entry in `app.yaml`.
+
+Full detail and RAG message shape: **[docs/PLAYGROUND_TO_APP.md](docs/PLAYGROUND_TO_APP.md)**.
+
+#### End-to-end MVP snippet (retrieve + generate)
+
+Run where the index path is readable and `rag` + `rag_embed` are installed. Use the **same** embedding model id as in `manifest.json` (pass `SentenceEmbedder(model_name=...)` if you overrode the default at index build).
 
 ```python
 from nyaya_dhwani.embedder import SentenceEmbedder
@@ -174,7 +223,7 @@ export SARVAM_API_KEY=”…”   # optional: STT, Mayura, Bulbul (see PLAYGROUN
 python app/main.py
 ```
 
-**Deploy** on the workspace: **Compute → Apps → Create** → connect this Git repo → set env per [docs/PLAYGROUND_TO_APP.md](docs/PLAYGROUND_TO_APP.md) (LLM + optional `SARVAM_API_KEY` + Volume read for the index). Full flow: [docs/PLAN.md](docs/PLAN.md#deploy-the-app-git-connected).
+**Deploy** on the workspace: **Compute → Apps → Create** → connect this Git repo → configure secrets and env as described in [§5 API keys, tokens, and secrets](#5-api-keys-tokens-and-secrets). The app's service principal needs **CAN_QUERY** on the AI Gateway endpoint. Full flow: [docs/PLAN.md](docs/PLAN.md#deploy-the-app-git-connected).
 
 **Entry point:** the repo includes **[`app.yaml`](app.yaml)** so Databricks runs `python app/main.py`. Without it, the default is `python app.py` in the repo root, which does not exist here — the app stays **Unavailable** with little logging. **`requirements.txt`** at the repo root is required for the Apps build step (`pip install -r requirements.txt`); it installs this package with RAG + Gradio extras.
 
@@ -184,8 +233,9 @@ python app/main.py
 |-------|------------|
 | Wrong Git URL | Use the exact repo URL (e.g. `https://github.com/shwethab/nyaya-dhwani-hackathon`) — avoid a truncated URL ending in `-`. |
 | No deployment | After fixing Git or adding `app.yaml`, **Save** and **Deploy** (or redeploy) so a new build runs. |
-| Secret env name | Map the Sarvam secret so the app receives **`SARVAM_API_KEY`** (resource key / env name your workspace uses for that value). |
-| LLM env | Set `DATABRICKS_TOKEN`, `LLM_OPENAI_BASE_URL`, `LLM_MODEL` in app env or secrets. |
+| `SARVAM_API_KEY` not set despite secret existing | The secret resource must be mapped in [`app.yaml`](app.yaml) via `valueFrom` — see [§5](#5-api-keys-tokens-and-secrets). A secret in the workspace is not automatically an env var. |
+| LLM auth fails on Databricks Apps | The service principal needs **CAN_QUERY** on the AI Gateway endpoint. `DATABRICKS_TOKEN` is not needed — the app uses `databricks-sdk` OAuth. See [§5](#5-api-keys-tokens-and-secrets). |
+| LLM auth fails locally | Set `DATABRICKS_TOKEN` (PAT), `LLM_OPENAI_BASE_URL`, and `LLM_MODEL` in `.env` — see [§5](#5-api-keys-tokens-and-secrets). |
 | `ImportError: HfFolder` from `huggingface_hub` | Pin **`huggingface-hub~=0.35.3`** with **`gradio~=4.44.0`** (see `requirements.txt` — matches the Databricks template). A newer hub (from unpinned installs) removes `HfFolder` while Gradio 4.44 still imports it. Redeploy after pull. |
 | `APIInfoParseError: Cannot parse schema True` or `TypeError: argument of type 'bool' is not iterable` on startup | Bug in `gradio-client` 1.3.0 when `gr.Chatbot` is used inside `gr.Blocks`. The monkey-patch in [`app/main.py`](app/main.py) fixes this. If you see this error, ensure you are running the latest code from `main`. |
 | `ValueError: When localhost is not accessible` | Caused by the `get_api_info()` crash above making the health check return 500. Fix the schema bug (monkey-patch) and use bare `demo.launch()` with no arguments — do **not** set `server_name`, `server_port`, or `root_path` explicitly. |
