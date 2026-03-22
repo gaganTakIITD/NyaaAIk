@@ -117,7 +117,7 @@ except Exception:
             embedding_source_columns=[
                 EmbeddingSourceColumn(
                     name=EMBEDDING_SOURCE_COLUMN,
-                    model_endpoint_name=EMBEDDING_MODEL,
+                    embedding_model_endpoint_name=EMBEDDING_MODEL,
                 )
             ],
             pipeline_type=PipelineType.TRIGGERED,
