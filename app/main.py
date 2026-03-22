@@ -259,7 +259,10 @@ def text_to_query_english(user_text: str, lang: str) -> str:
     if lang == "en":
         return t
     if not sarvam_configured():
-        logger.warning("SARVAM_API_KEY missing — using raw text for retrieval (degraded).")
+        _key = os.environ.get("SARVAM_API_KEY", "")
+        logger.warning("SARVAM_API_KEY missing — env value=%r (len=%d). All env keys with SARVAM: %s",
+                        _key[:8] + "…" if len(_key) > 8 else _key, len(_key),
+                        [k for k in os.environ if "SARVAM" in k.upper() or "sarvam" in k])
         return t
     return _maybe_translate(t, source="auto", target="en-IN")
 
