@@ -34,6 +34,7 @@ EMBEDDING_SOURCE_COLUMN = "text"
 # COMMAND ----------
 
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.vectorsearch import EndpointType
 import time
 
 w = WorkspaceClient()
@@ -46,7 +47,7 @@ else:
     print(f"Creating endpoint '{VS_ENDPOINT_NAME}'...")
     w.vector_search_endpoints.create_endpoint(
         name=VS_ENDPOINT_NAME,
-        endpoint_type="STANDARD",
+        endpoint_type=EndpointType.STANDARD,
     )
     print("Endpoint creation started.")
 
