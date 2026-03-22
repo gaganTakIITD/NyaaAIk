@@ -93,24 +93,35 @@ display(spark.table(SOURCE_TABLE).limit(3))
 
 # COMMAND ----------
 
+from databricks.sdk.service.vectorsearch import (
+    DeltaSyncVectorIndexSpecRequest,
+    EmbeddingSourceColumn,
+    VectorIndexType,
+    PipelineType,
+)
+
 # Check if index already exists
 try:
     existing_idx = w.vector_search_indexes.get_index(VS_INDEX_NAME)
-    print(f"Index '{VS_INDEX_NAME}' already exists (status: {existing_idx.status})")
+    idx_status = getattr(existing_idx, "status", None) or getattr(existing_idx, "index_status", None)
+    print(f"Index '{VS_INDEX_NAME}' already exists (status: {idx_status})")
 except Exception:
     print(f"Creating Delta Sync index '{VS_INDEX_NAME}'...")
     w.vector_search_indexes.create_index(
         name=VS_INDEX_NAME,
         endpoint_name=VS_ENDPOINT_NAME,
         primary_key=PRIMARY_KEY,
-        index_type="DELTA_SYNC",
-        delta_sync_index_spec={
-            "source_table": SOURCE_TABLE,
-            "embedding_source_columns": [
-                {"name": EMBEDDING_SOURCE_COLUMN, "model_endpoint_name": EMBEDDING_MODEL}
+        index_type=VectorIndexType.DELTA_SYNC,
+        delta_sync_index_spec=DeltaSyncVectorIndexSpecRequest(
+            source_table=SOURCE_TABLE,
+            embedding_source_columns=[
+                EmbeddingSourceColumn(
+                    name=EMBEDDING_SOURCE_COLUMN,
+                    model_endpoint_name=EMBEDDING_MODEL,
+                )
             ],
-            "pipeline_type": "TRIGGERED",
-        },
+            pipeline_type=PipelineType.TRIGGERED,
+        ),
     )
     print("Index creation started.")
 
