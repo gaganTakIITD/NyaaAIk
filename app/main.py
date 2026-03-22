@@ -476,8 +476,33 @@ def build_app() -> gr.Blocks:
     return demo
 
 
+def _load_secrets_from_scope() -> None:
+    """Load secrets from Databricks secret scope into env vars (for Databricks Apps).
+
+    The Apps UI secret resources don't always wire through reliably.
+    Fall back to reading from the workspace secret scope via the SDK,
+    the same way notebooks do with dbutils.secrets.get().
+    """
+    mapping = {
+        "SARVAM_API_KEY": ("nyaya-dhwani", "sarvam_api_key"),
+    }
+    for env_var, (scope, key) in mapping.items():
+        if os.environ.get(env_var, "").strip():
+            continue  # already set (e.g. locally or via Apps resource)
+        try:
+            from databricks.sdk import WorkspaceClient
+            w = WorkspaceClient()
+            val = w.secrets.get_secret(scope=scope, key=key)
+            if val and val.value:
+                os.environ[env_var] = val.value
+                logger.info("Loaded %s from secret scope %s/%s", env_var, scope, key)
+        except Exception as exc:
+            logger.warning("Could not load %s from secret scope: %s", env_var, exc)
+
+
 def main() -> None:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
+    _load_secrets_from_scope()
     demo = build_app()
     demo.queue()
     # Match Databricks app-templates: bare launch() lets the platform
