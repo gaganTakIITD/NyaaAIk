@@ -15,10 +15,13 @@ See ``docs/PLAYGROUND_TO_APP.md``.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 120
 
@@ -50,13 +53,40 @@ def _bearer() -> str:
     )
     if token:
         return token
-    # Databricks Apps: get an OAuth token from the SDK (service principal auth).
+    return _sdk_oauth_token()
+
+
+def _sdk_oauth_token() -> str:
+    """Get a fresh OAuth token from the Databricks SDK (service principal auth).
+
+    On Databricks Apps, the service principal uses OAuth M2M — there is no
+    static PAT.  ``WorkspaceClient().config.token`` is ``None`` in that case.
+    We call the SDK's internal token provider to get a short-lived token.
+    """
     try:
         from databricks.sdk import WorkspaceClient
         w = WorkspaceClient()
-        return w.config.token
-    except Exception:
-        pass
+        logger.info("SDK auth_type=%s, host=%s", w.config.auth_type, w.config.host)
+        # Try static token first (PAT auth).
+        if w.config.token:
+            logger.info("Using static token from SDK config")
+            return w.config.token
+        # OAuth: the header_factory produces {"Authorization": "Bearer <token>"}.
+        hf = w.config.authenticate
+        if callable(hf):
+            headers: dict[str, str] = {}
+            result = hf(headers)
+            # Some SDK versions return the dict, others mutate in-place.
+            if isinstance(result, dict):
+                headers = result
+            auth = headers.get("Authorization", "")
+            if auth.startswith("Bearer "):
+                logger.info("Got OAuth token from SDK (%d chars)", len(auth) - 7)
+                return auth[7:]
+            logger.warning("SDK authenticate() returned headers without Bearer: %s",
+                           list(headers.keys()))
+    except Exception as exc:
+        logger.warning("SDK OAuth token failed: %s", exc)
     return ""
 
 
