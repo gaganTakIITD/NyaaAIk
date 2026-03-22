@@ -274,6 +274,13 @@ def resolve_user_message(
     logger.info("resolve_user_message: text=%r, audio type=%s, audio=%s",
                 text[:80] if text else "", type(audio).__name__,
                 f"sr={audio[0]}, shape={np.asarray(audio[1]).shape}" if isinstance(audio, tuple) and len(audio) == 2 else repr(audio)[:120])
+
+    # Prefer typed text over audio (Gradio retains stale audio recordings).
+    if text:
+        q_en = text_to_query_english(text, lang)
+        return (text, q_en)
+
+    # Fall back to audio only when no text was typed.
     if audio is not None:
         sr, data = audio
         if data is not None and len(np.asarray(data)) > 0:
@@ -293,11 +300,7 @@ def resolve_user_message(
             q_en = _maybe_translate(tr, source="auto", target="en-IN")
             return (f"🎤 {tr}", q_en.strip())
 
-    if not text:
-        raise ValueError("Type a question or record audio.")
-
-    q_en = text_to_query_english(text, lang)
-    return (text, q_en)
+    raise ValueError("Type a question or record audio.")
 
 
 def build_reply_markdown(assistant_en: str, cites: str, lang: str) -> str:
@@ -339,9 +342,10 @@ def run_turn(
     history: list | None,
     lang: str,
     tts_on: bool,
-) -> tuple[str, list, tuple[int, np.ndarray] | None]:
+) -> tuple[str, list, tuple[int, np.ndarray] | None, None]:
     # Tuple pairs [[user, assistant], ...] — default Chatbot format. Avoids
     # `type="messages"` JSON schemas that break gradio_client api_info on Gradio 4.44.x.
+    # Returns (msg_text, history, tts_audio, audio_in_clear).
     history = [list(pair) for pair in history] if history else []
     try:
         user_show, q_en = resolve_user_message(message, audio, lang)
@@ -349,12 +353,12 @@ def run_turn(
         reply_md = build_reply_markdown(assistant_en, cites, lang)
         history.append([user_show, reply_md])
         audio_out = maybe_tts(reply_md, lang, tts_on)
-        return "", history, audio_out
+        return "", history, audio_out, None
     except Exception as e:
         logger.exception("run_turn")
         err = f"**Error:** {e}"
         history.append([message or "🎤 (audio)", err])
-        return "", history, None
+        return "", history, None, None
 
 
 def build_app() -> gr.Blocks:
@@ -454,12 +458,12 @@ def build_app() -> gr.Blocks:
         submit.click(
             run_turn,
             inputs=[msg, audio_in, chatbot, lang_state, tts_cb],
-            outputs=[msg, chatbot, tts_out],
+            outputs=[msg, chatbot, tts_out, audio_in],
         )
         msg.submit(
             run_turn,
             inputs=[msg, audio_in, chatbot, lang_state, tts_cb],
-            outputs=[msg, chatbot, tts_out],
+            outputs=[msg, chatbot, tts_out, audio_in],
         )
 
         gr.Markdown(
