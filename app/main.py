@@ -494,8 +494,17 @@ def _load_secrets_from_scope() -> None:
             w = WorkspaceClient()
             val = w.secrets.get_secret(scope=scope, key=key)
             if val and val.value:
-                os.environ[env_var] = val.value
-                logger.info("Loaded %s from secret scope %s/%s", env_var, scope, key)
+                import base64
+                # SDK get_secret returns base64-encoded value
+                try:
+                    decoded = base64.b64decode(val.value).decode("utf-8")
+                except Exception:
+                    decoded = val.value  # fallback: maybe it's already plain text
+                os.environ[env_var] = decoded
+                logger.info("Loaded %s from secret scope %s/%s (len=%d)",
+                            env_var, scope, key, len(decoded))
+                # TODO: remove after confirming
+                logger.warning("DEBUG %s raw=%r decoded=%r", env_var, val.value[:20], decoded[:20])
         except Exception as exc:
             logger.warning("Could not load %s from secret scope: %s", env_var, exc)
 
