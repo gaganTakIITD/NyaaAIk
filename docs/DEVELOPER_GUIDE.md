@@ -162,6 +162,38 @@ User input (any language)
 - Both versions are shown so users can verify translation quality
 - TTS reads only the translated portion
 
+### Sarvam Mayura silent failure on long text
+
+**Problem:** Sarvam Mayura's translate API silently returns the input text unchanged when it exceeds ~500 characters. No error is raised — the HTTP response is 200 and the `translated_text` field contains the original English text verbatim.
+
+**Symptom:** the bilingual response shows identical English text under both the language label (e.g. "Kannada:") and the "English:" section. Short text like the disclaimer translates correctly, but long LLM responses come back unchanged.
+
+**Solution:** chunk long text before translating. The app splits responses on newline boundaries into chunks of ~500 characters, translates each chunk independently, and rejoins:
+
+```python
+_TRANSLATE_CHUNK_LIMIT = 500
+
+def _chunked_translate(text, *, source, target):
+    paragraphs = text.split("\n")
+    chunks = []
+    current = ""
+    for para in paragraphs:
+        if len(current) + len(para) + 1 > _TRANSLATE_CHUNK_LIMIT and current:
+            chunks.append(current)
+            current = para
+        else:
+            current = f"{current}\n{para}" if current else para
+    if current:
+        chunks.append(current)
+    return "\n".join(translate_text(c, ...) for c in chunks)
+```
+
+**For other developers using Sarvam Mayura:**
+- Always chunk text longer than ~500 characters
+- Split on paragraph or sentence boundaries to preserve context within each chunk
+- The API does not document this limit or return an error — you must handle it client-side
+- Short text (disclaimers, single sentences) translates fine without chunking
+
 ## `app.yaml` configuration
 
 ```yaml
