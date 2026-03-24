@@ -1,0 +1,286 @@
+{
+  "_meta": {
+    "description": "Benchmark questions for Nyaya Dhwani RAG evaluation",
+    "format": "Inspired by BhashaBench-Legal (bharatgenai/BhashaBench-Legal) MCQ format",
+    "categories": ["ipc_bns_mapping", "bns_knowledge", "ipc_knowledge", "cross_reference"],
+    "languages": ["en", "hi", "kn"]
+  },
+  "questions": [
+    {
+      "id": "MAP_001",
+      "category": "ipc_bns_mapping",
+      "difficulty": "easy",
+      "language": "en",
+      "question": "Which BNS Section replaces IPC Section 378 (Theft)?",
+      "options": {
+        "a": "BNS Section 301",
+        "b": "BNS Section 303(1)",
+        "c": "BNS Section 317",
+        "d": "BNS Section 379"
+      },
+      "correct_answer": "b",
+      "expected_chunks": ["MAP_BNS303"]
+    },
+    {
+      "id": "MAP_002",
+      "category": "ipc_bns_mapping",
+      "difficulty": "easy",
+      "language": "en",
+      "question": "IPC Section 302 (Punishment for murder) corresponds to which BNS Section?",
+      "options": {
+        "a": "BNS Section 101",
+        "b": "BNS Section 103",
+        "c": "BNS Section 109",
+        "d": "BNS Section 302"
+      },
+      "correct_answer": "b",
+      "expected_chunks": ["MAP_BNS103"]
+    },
+    {
+      "id": "MAP_003",
+      "category": "ipc_bns_mapping",
+      "difficulty": "medium",
+      "language": "en",
+      "question": "Which BNS Section replaces IPC Section 413 (Habitually dealing in stolen property)?",
+      "options": {
+        "a": "BNS Section 313",
+        "b": "BNS Section 317(4)",
+        "c": "BNS Section 413",
+        "d": "BNS Section 320"
+      },
+      "correct_answer": "b",
+      "expected_chunks": ["MAP_BNS317"]
+    },
+    {
+      "id": "MAP_004",
+      "category": "ipc_bns_mapping",
+      "difficulty": "medium",
+      "language": "en",
+      "question": "IPC Section 375 (Rape) has been replaced by which BNS Section?",
+      "options": {
+        "a": "BNS Section 63",
+        "b": "BNS Section 375",
+        "c": "BNS Section 65",
+        "d": "BNS Section 100"
+      },
+      "correct_answer": "a",
+      "expected_chunks": ["MAP_BNS63"]
+    },
+    {
+      "id": "MAP_005",
+      "category": "ipc_bns_mapping",
+      "difficulty": "easy",
+      "language": "en",
+      "question": "Which BNS Section corresponds to IPC Section 420 (Cheating)?",
+      "options": {
+        "a": "BNS Section 318",
+        "b": "BNS Section 420",
+        "c": "BNS Section 320",
+        "d": "BNS Section 415"
+      },
+      "correct_answer": "a",
+      "expected_chunks": ["MAP_BNS318"]
+    },
+    {
+      "id": "MAP_006",
+      "category": "ipc_bns_mapping",
+      "difficulty": "hard",
+      "language": "en",
+      "question": "BNS Section 111 (Organised Crime) is a new section with no IPC equivalent. Which statement is correct?",
+      "options": {
+        "a": "BNS 111 replaces IPC 120B",
+        "b": "BNS 111 replaces IPC 302",
+        "c": "BNS 111 is a new provision with no IPC counterpart",
+        "d": "BNS 111 replaces IPC 411"
+      },
+      "correct_answer": "c",
+      "expected_chunks": ["MAP_BNS111"]
+    },
+    {
+      "id": "BNS_001",
+      "category": "bns_knowledge",
+      "difficulty": "easy",
+      "language": "en",
+      "question": "What does BNS Section 303 deal with?",
+      "options": {
+        "a": "Murder",
+        "b": "Theft",
+        "c": "Fraud",
+        "d": "Kidnapping"
+      },
+      "correct_answer": "b",
+      "expected_chunks": ["BNS_S303", "MAP_BNS303"]
+    },
+    {
+      "id": "BNS_002",
+      "category": "bns_knowledge",
+      "difficulty": "medium",
+      "language": "en",
+      "question": "BNS Section 109 deals with which offence?",
+      "options": {
+        "a": "Theft",
+        "b": "Criminal conspiracy",
+        "c": "Attempt to murder",
+        "d": "Cheating"
+      },
+      "correct_answer": "c",
+      "expected_chunks": ["MAP_BNS109", "BNS_S109"]
+    },
+    {
+      "id": "BNS_003",
+      "category": "bns_knowledge",
+      "difficulty": "medium",
+      "language": "en",
+      "question": "Which BNS Section covers 'Terrorist Act' as a new provision?",
+      "options": {
+        "a": "BNS Section 111",
+        "b": "BNS Section 113",
+        "c": "BNS Section 120",
+        "d": "BNS Section 150"
+      },
+      "correct_answer": "b",
+      "expected_chunks": ["MAP_BNS113"]
+    },
+    {
+      "id": "CROSS_001",
+      "category": "cross_reference",
+      "difficulty": "hard",
+      "language": "en",
+      "question": "A person is charged under IPC Section 379 for theft. Under the new BNS, which section would apply for the same offence?",
+      "options": {
+        "a": "BNS Section 303",
+        "b": "BNS Section 379",
+        "c": "BNS Section 317",
+        "d": "BNS Section 301"
+      },
+      "correct_answer": "a",
+      "expected_chunks": ["MAP_BNS303"]
+    },
+    {
+      "id": "CROSS_002",
+      "category": "cross_reference",
+      "difficulty": "hard",
+      "language": "en",
+      "question": "An FIR was registered under IPC Section 307 (Attempt to murder). What is the corresponding BNS Section?",
+      "options": {
+        "a": "BNS Section 307",
+        "b": "BNS Section 103",
+        "c": "BNS Section 109",
+        "d": "BNS Section 115"
+      },
+      "correct_answer": "c",
+      "expected_chunks": ["MAP_BNS109"]
+    },
+    {
+      "id": "CROSS_003",
+      "category": "cross_reference",
+      "difficulty": "medium",
+      "language": "en",
+      "question": "Under IPC, assault with intent to commit theft of property is covered by Section 356. What is its BNS equivalent?",
+      "options": {
+        "a": "BNS Section 131",
+        "b": "BNS Section 134",
+        "c": "BNS Section 356",
+        "d": "BNS Section 140"
+      },
+      "correct_answer": "b",
+      "expected_chunks": ["MAP_BNS134"]
+    },
+    {
+      "id": "HI_001",
+      "category": "ipc_bns_mapping",
+      "difficulty": "easy",
+      "language": "hi",
+      "question": "IPC की धारा 378 (चोरी) को BNS की किस धारा से प्रतिस्थापित किया गया है?",
+      "options": {
+        "a": "BNS धारा 301",
+        "b": "BNS धारा 303(1)",
+        "c": "BNS धारा 317",
+        "d": "BNS धारा 379"
+      },
+      "correct_answer": "b",
+      "expected_chunks": ["MAP_BNS303"]
+    },
+    {
+      "id": "HI_002",
+      "category": "ipc_bns_mapping",
+      "difficulty": "medium",
+      "language": "hi",
+      "question": "IPC की धारा 302 (हत्या की सजा) BNS की किस धारा से मेल खाती है?",
+      "options": {
+        "a": "BNS धारा 101",
+        "b": "BNS धारा 103",
+        "c": "BNS धारा 109",
+        "d": "BNS धारा 302"
+      },
+      "correct_answer": "b",
+      "expected_chunks": ["MAP_BNS103"]
+    },
+    {
+      "id": "KN_001",
+      "category": "ipc_bns_mapping",
+      "difficulty": "easy",
+      "language": "kn",
+      "question": "IPC ಸೆಕ್ಷನ್ 378 (ಕಳ್ಳತನ) ಅನ್ನು BNS ಯ ಯಾವ ಸೆಕ್ಷನ್ ಬದಲಿಸಿದೆ?",
+      "options": {
+        "a": "BNS ಸೆಕ್ಷನ್ 301",
+        "b": "BNS ಸೆಕ್ಷನ್ 303(1)",
+        "c": "BNS ಸೆಕ್ಷನ್ 317",
+        "d": "BNS ಸೆಕ್ಷನ್ 379"
+      },
+      "correct_answer": "b",
+      "expected_chunks": ["MAP_BNS303"]
+    },
+    {
+      "id": "KN_002",
+      "category": "bns_knowledge",
+      "difficulty": "medium",
+      "language": "kn",
+      "question": "BNS ಸೆಕ್ಷನ್ 109 ಯಾವ ಅಪರಾಧವನ್ನು ಒಳಗೊಂಡಿದೆ?",
+      "options": {
+        "a": "ಕಳ್ಳತನ",
+        "b": "ಅಪರಾಧ ಒಳಸಂಚು",
+        "c": "ಕೊಲೆ ಪ್ರಯತ್ನ",
+        "d": "ವಂಚನೆ"
+      },
+      "correct_answer": "c",
+      "expected_chunks": ["MAP_BNS109", "BNS_S109"]
+    },
+    {
+      "id": "OPEN_001",
+      "category": "open_ended",
+      "difficulty": "medium",
+      "language": "en",
+      "question": "What is theft under BNS? Give me the applicable IPC and BNS sections.",
+      "expected_in_answer": ["BNS Section 303", "IPC Section 378", "theft"],
+      "expected_chunks": ["MAP_BNS303", "BNS_S303"]
+    },
+    {
+      "id": "OPEN_002",
+      "category": "open_ended",
+      "difficulty": "hard",
+      "language": "en",
+      "question": "Explain IPC Section 413 and its related BNS Section.",
+      "expected_in_answer": ["IPC Section 413", "BNS Section 317", "stolen property"],
+      "expected_chunks": ["MAP_BNS317"]
+    },
+    {
+      "id": "OPEN_003",
+      "category": "open_ended",
+      "difficulty": "medium",
+      "language": "en",
+      "question": "What are the key differences between IPC and BNS regarding attempt to murder?",
+      "expected_in_answer": ["IPC Section 307", "BNS Section 109", "attempt to murder"],
+      "expected_chunks": ["MAP_BNS109"]
+    },
+    {
+      "id": "OPEN_004",
+      "category": "open_ended",
+      "difficulty": "easy",
+      "language": "en",
+      "question": "What is the punishment for theft under Indian law?",
+      "expected_in_answer": ["theft", "punishment", "303"],
+      "expected_chunks": ["BNS_S303", "MAP_BNS303"]
+    }
+  ]
+}
