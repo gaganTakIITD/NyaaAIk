@@ -350,9 +350,21 @@ def run_turn(
 
 def build_app() -> gr.Blocks:
     custom_css = """
+    /* Light theme */
     .gradio-container { background-color: #F7F3ED !important; }
     footer { font-size: 0.85rem; color: #2A5297; }
     h1 { color: #0D1B3E; font-family: Georgia, serif; }
+
+    /* Dark theme: respect browser/OS preference */
+    @media (prefers-color-scheme: dark) {
+        .gradio-container { background-color: #1a1a2e !important; }
+        h1 { color: #e0d8cc; }
+        footer { color: #8ea4c8; }
+    }
+    /* Also handle Gradio's own dark class */
+    .dark .gradio-container { background-color: #1a1a2e !important; }
+    .dark h1 { color: #e0d8cc; }
+    .dark footer { color: #8ea4c8; }
     """
 
     with gr.Blocks(
@@ -373,8 +385,8 @@ def build_app() -> gr.Blocks:
                 choices=[(c[1], c[0]) for c in SARVAM_LANGUAGES],  # (label, value)
                 value="en",
                 label="Select your language / अपनी भाषा चुनें",
-                info="Typed questions in other languages use **Mayura** (needs SARVAM_API_KEY). "
-                "Retrieval/embeddings use English after translation.",
+                info="Non-English questions are translated to English for retrieval, "
+                "then answers are translated back to your language.",
             )
 
             begin_btn = gr.Button("Begin / शुरू करें", variant="primary")
@@ -398,7 +410,7 @@ def build_app() -> gr.Blocks:
                 bubble_full_width=False,
             )
             msg = gr.Textbox(
-                placeholder="Type your legal question (any supported language if Sarvam is set)…",
+                placeholder="Type your legal question in any supported language…",
                 show_label=False,
                 lines=2,
             )
@@ -408,8 +420,8 @@ def build_app() -> gr.Blocks:
                 label="Or speak your question",
             )
             tts_cb = gr.Checkbox(
-                label="Read answer aloud (Sarvam Bulbul TTS)",
-                value=False,
+                label="Read answer aloud",
+                value=True,
             )
             tts_out = gr.Audio(
                 label="Listen to answer",
@@ -453,8 +465,8 @@ def build_app() -> gr.Blocks:
         audio_in.stop_recording(**_run_turn_io)
 
         gr.Markdown(
-            "<small>RAG index on UC Volume · LLM: Databricks Llama Maverick · "
-            "Sarvam: Saaras STT, Mayura translate, Bulbul TTS (`SARVAM_API_KEY`)</small>"
+            "<small>Powered by Databricks (Llama Maverick + Vector Search) · "
+            "Sarvam AI (translation, speech-to-text, text-to-speech)</small>"
         )
 
     return demo
