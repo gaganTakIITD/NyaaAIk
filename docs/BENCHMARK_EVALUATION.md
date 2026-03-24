@@ -33,15 +33,64 @@ All evaluation runs in a **Databricks notebook** (`notebooks/run_benchmark.py`) 
 | Constitutional & Administrative Law | Partially relevant | 3,609 |
 | Full dataset | Broad legal coverage | 24,365 |
 
-**Access:** the dataset is gated. Request access at the HuggingFace page. Once approved, download with:
+**Access:** the dataset is **gated** — the owner must approve your HuggingFace account before you can download it. Here's the step-by-step:
+
+**Step 1 — Request access (manual, one-time):**
+
+1. Go to https://huggingface.co/datasets/bharatgenai/BhashaBench-Legal
+2. Sign in with the HuggingFace account linked to your token
+3. Click **"Request access"** (or "Agree and access" if there's a license agreement)
+4. Some gated datasets approve instantly; others require the owner (`bharatgenai`) to approve manually — check back after a few hours
+5. Verify access: run `curl -H "Authorization: Bearer YOUR_TOKEN" https://huggingface.co/api/datasets/bharatgenai/BhashaBench-Legal` — if you get metadata (not 403), you're approved
+
+**Step 2 — Store HF token in Databricks secrets:**
+
+```bash
+databricks secrets put-secret nyaya-dhwani hf_token
+# paste your HuggingFace token when prompted
+```
+
+**Step 3 — Download in the benchmark notebook:**
+
+The notebook includes a cell that downloads the Criminal Law subset and saves it for evaluation:
 
 ```python
+import os
+os.environ["HF_TOKEN"] = dbutils.secrets.get("nyaya-dhwani", "hf_token")
+
+!pip install datasets
+
 from datasets import load_dataset
-ds = load_dataset("bharatgenai/BhashaBench-Legal", data_dir="English", split="test", token="YOUR_TOKEN")
-# Filter to Criminal Law
-criminal = ds.filter(lambda x: "Criminal" in (x.get("topic") or ""))
-criminal.to_json("tests/bbl_criminal_law.json")
+
+# Download English + Hindi
+ds_en = load_dataset("bharatgenai/BhashaBench-Legal", data_dir="English", split="test", token=os.environ["HF_TOKEN"])
+ds_hi = load_dataset("bharatgenai/BhashaBench-Legal", data_dir="Hindi", split="test", token=os.environ["HF_TOKEN"])
+
+# Filter to Criminal Law & Justice (most relevant for BNS/IPC)
+criminal_en = ds_en.filter(lambda x: "Criminal" in (x.get("topic") or ""))
+criminal_hi = ds_hi.filter(lambda x: "Criminal" in (x.get("topic") or ""))
+
+print(f"Criminal Law questions: {len(criminal_en)} English, {len(criminal_hi)} Hindi")
+
+# Save to repo tests/ folder and optionally to Delta
+criminal_en.to_json(f"{REPO_ROOT}/tests/bbl_criminal_law_en.json")
+criminal_hi.to_json(f"{REPO_ROOT}/tests/bbl_criminal_law_hi.json")
+
+# Also save to Delta table for easy querying
+import pandas as pd
+spark.createDataFrame(criminal_en.to_pandas()).write.mode("overwrite").saveAsTable("main.india_legal.bbl_criminal_law_en")
+spark.createDataFrame(criminal_hi.to_pandas()).write.mode("overwrite").saveAsTable("main.india_legal.bbl_criminal_law_hi")
 ```
+
+**Step 4 — Run MCQ evaluation against BhashaBench-Legal:**
+
+The notebook's Phase 2 (MCQ evaluation) automatically picks up the downloaded BBL questions if the JSON files exist. Each question is:
+1. Retrieved against Vector Search (same as app)
+2. Formatted as MCQ with RAG context
+3. Answered by Llama Maverick
+4. Scored against `correct_answer`
+
+**If access is not yet approved:** the benchmark notebook skips BBL and runs only against the internal 20-question set. No errors — just fewer questions.
 
 **Columns:** `question`, `option_a`–`option_d`, `correct_answer`, `question_type`, `question_level`, `topic`, `subdomain`.
 
@@ -113,8 +162,9 @@ criminal.to_json("tests/bbl_criminal_law.json")
 
 | Cell | What it does | Services used |
 |------|-------------|---------------|
-| **Setup** | Install deps, configure `sys.path`, load secrets from scope | `databricks-sdk` |
+| **Setup** | Install deps, configure `sys.path`, load secrets from scope (Sarvam, HF token, LLM) | `databricks-sdk` |
 | **Load benchmark** | Read `tests/benchmark_questions.json` from repo | File I/O |
+| **Download BBL** | If HF token is available, download BhashaBench-Legal Criminal Law subset → save to `tests/` + Delta table. Skips gracefully if not approved. | HuggingFace `datasets` |
 | **Phase 1a: FAISS retrieval** | For each question: embed → FAISS search → check expected chunks | `SentenceEmbedder`, `CorpusIndex` |
 | **Phase 1b: VS retrieval** | Same questions via `query_index()` → check expected chunks | Vector Search endpoint |
 | **Phase 1 results** | Compare Recall@7, MRR, keyword boost hit rate side by side | Display/Delta |
@@ -136,6 +186,7 @@ The benchmark notebook needs the same access as the app. Here's what's required:
 | **LLM (Llama Maverick)** | `nyaya_dhwani.llm_client.chat_completions()` | Set `LLM_OPENAI_BASE_URL`, `LLM_MODEL`, `DATABRICKS_TOKEN` as env vars in the notebook. Use Playground → Get code. |
 | **Sarvam API** | `nyaya_dhwani.sarvam_client.translate_text()` | Load `SARVAM_API_KEY` from secret scope: `os.environ["SARVAM_API_KEY"] = dbutils.secrets.get("nyaya-dhwani", "sarvam_api_key")` |
 | **Benchmark questions** | `json.load(open("tests/benchmark_questions.json"))` | Repo must be cloned in Databricks Repos. Set `REPO_ROOT` to the Repos path. |
+| **HuggingFace (BBL)** | `datasets.load_dataset(..., token=HF_TOKEN)` | Store token: `databricks secrets put-secret nyaya-dhwani hf_token`. Request access at the BBL dataset page first (see above). |
 
 **Setup cell pattern (copy-paste ready):**
 
@@ -153,6 +204,12 @@ os.environ["DATABRICKS_TOKEN"] = dbutils.secrets.get("nyaya-dhwani", "databricks
 
 # Sarvam (for multilingual eval)
 os.environ["SARVAM_API_KEY"] = dbutils.secrets.get("nyaya-dhwani", "sarvam_api_key")
+
+# HuggingFace (for BhashaBench-Legal download — skip if not yet approved)
+try:
+    os.environ["HF_TOKEN"] = dbutils.secrets.get("nyaya-dhwani", "hf_token")
+except Exception:
+    print("HF_TOKEN not found in secrets — BBL evaluation will be skipped")
 
 # Vector Search config
 VS_ENDPOINT = "nyaya_vs_endpoint"
@@ -293,9 +350,16 @@ overlap = len(en_ids & hi_ids) / len(en_ids) if en_ids else 0
 | Source | Status | How to get |
 |--------|--------|-----------|
 | Internal (`tests/benchmark_questions.json`) | Available | In repo, 20 questions |
-| BhashaBench-Legal Criminal Law | Gated | Request access at HuggingFace, filter `topic="Criminal Law & Justice"`, save to `tests/bbl_criminal_law.json` |
-| BhashaBench-Legal Hindi | Gated | Same dataset, `data_dir="Hindi"` |
+| BhashaBench-Legal Criminal Law (English) | Gated — request access | 1. Request access at HF page. 2. Store token: `databricks secrets put-secret nyaya-dhwani hf_token`. 3. Notebook downloads automatically. |
+| BhashaBench-Legal Criminal Law (Hindi) | Gated — request access | Same dataset, `data_dir="Hindi"` — downloaded in same notebook cell |
 | User-submitted questions | Manual | Collect from app usage logs (with consent) |
+
+**Prerequisite checklist for BBL:**
+
+- [ ] Request access at https://huggingface.co/datasets/bharatgenai/BhashaBench-Legal
+- [ ] Wait for approval (check by visiting the page — if you can see data preview, you're in)
+- [ ] Store HF token: `databricks secrets put-secret nyaya-dhwani hf_token`
+- [ ] Run the "Download BBL" cell in the benchmark notebook
 
 ## Success criteria
 
