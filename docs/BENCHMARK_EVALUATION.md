@@ -33,26 +33,29 @@ All evaluation runs in a **Databricks notebook** (`notebooks/run_benchmark.py`) 
 | Constitutional & Administrative Law | Partially relevant | 3,609 |
 | Full dataset | Broad legal coverage | 24,365 |
 
-**Access:** the dataset is **gated** — the owner must approve your HuggingFace account before you can download it. Here's the step-by-step:
+**Access:** the dataset is gated but **access has been approved**. The HF token is stored in the Databricks secret scope `nyaya-dhwani/hf_token`.
 
-**Step 1 — Request access (manual, one-time):**
+**Verified columns:** `id`, `question`, `option_a`–`option_d`, `correct_answer`, `question_type`, `question_level`, `topic`, `subject_domain`, `language`.
 
-1. Go to https://huggingface.co/datasets/bharatgenai/BhashaBench-Legal
-2. Sign in with the HuggingFace account linked to your token
-3. Click **"Request access"** (or "Agree and access" if there's a license agreement)
-4. Some gated datasets approve instantly; others require the owner (`bharatgenai`) to approve manually — check back after a few hours
-5. Verify access: run `curl -H "Authorization: Bearer YOUR_TOKEN" https://huggingface.co/api/datasets/bharatgenai/BhashaBench-Legal` — if you get metadata (not 403), you're approved
+**Dataset distribution (from first 100 English rows):**
 
-**Step 2 — Store HF token in Databricks secrets:**
+| Subject domain | % of sample |
+|----------------|-------------|
+| Civil Litigation & Procedure | 29% |
+| Constitutional & Administrative Law | 19% |
+| **Criminal Law & Justice** | **13%** |
+| Corporate & Commercial Law | 8% |
+| Other domains | 31% |
 
-```bash
-databricks secrets put-secret nyaya-dhwani hf_token
-# paste your HuggingFace token when prompted
-```
+**Sample Criminal Law question (English):**
+> *Assertion (A): Homicide is the killing of a human being by another human being.*
+> *Reason (R): Homicide is always unlawful.*
+> *Select the correct answer.* → **C**
 
-**Step 3 — Download in the benchmark notebook:**
+**Sample Criminal Law question (Hindi):**
+> *'A' एक झाड़ी में गोली चलाता है, जहाँ उसके अनजाने में 'Y' कुछ काम कर रहा होता है...* → **C**
 
-The notebook includes a cell that downloads the Criminal Law subset and saves it for evaluation:
+**How the benchmark notebook downloads BBL:**
 
 ```python
 import os
@@ -62,35 +65,26 @@ os.environ["HF_TOKEN"] = dbutils.secrets.get("nyaya-dhwani", "hf_token")
 
 from datasets import load_dataset
 
-# Download English + Hindi
+# Download English + Hindi (full dataset)
 ds_en = load_dataset("bharatgenai/BhashaBench-Legal", data_dir="English", split="test", token=os.environ["HF_TOKEN"])
 ds_hi = load_dataset("bharatgenai/BhashaBench-Legal", data_dir="Hindi", split="test", token=os.environ["HF_TOKEN"])
 
 # Filter to Criminal Law & Justice (most relevant for BNS/IPC)
-criminal_en = ds_en.filter(lambda x: "Criminal" in (x.get("topic") or ""))
-criminal_hi = ds_hi.filter(lambda x: "Criminal" in (x.get("topic") or ""))
+criminal_en = ds_en.filter(lambda x: "Criminal" in (x.get("subject_domain") or ""))
+criminal_hi = ds_hi.filter(lambda x: "Criminal" in (x.get("subject_domain") or ""))
 
 print(f"Criminal Law questions: {len(criminal_en)} English, {len(criminal_hi)} Hindi")
 
-# Save to repo tests/ folder and optionally to Delta
-criminal_en.to_json(f"{REPO_ROOT}/tests/bbl_criminal_law_en.json")
-criminal_hi.to_json(f"{REPO_ROOT}/tests/bbl_criminal_law_hi.json")
-
-# Also save to Delta table for easy querying
-import pandas as pd
+# Save to Delta tables for evaluation
 spark.createDataFrame(criminal_en.to_pandas()).write.mode("overwrite").saveAsTable("main.india_legal.bbl_criminal_law_en")
 spark.createDataFrame(criminal_hi.to_pandas()).write.mode("overwrite").saveAsTable("main.india_legal.bbl_criminal_law_hi")
 ```
 
-**Step 4 — Run MCQ evaluation against BhashaBench-Legal:**
-
-The notebook's Phase 2 (MCQ evaluation) automatically picks up the downloaded BBL questions if the JSON files exist. Each question is:
-1. Retrieved against Vector Search (same as app)
-2. Formatted as MCQ with RAG context
-3. Answered by Llama Maverick
-4. Scored against `correct_answer`
-
-**If access is not yet approved:** the benchmark notebook skips BBL and runs only against the internal 20-question set. No errors — just fewer questions.
+The notebook's Phase 2 (MCQ evaluation) runs BBL questions through the same RAG pipeline as the app:
+1. Retrieve context via Vector Search (same as app)
+2. Format MCQ prompt with RAG context
+3. Call Llama Maverick
+4. Score against `correct_answer`
 
 **Columns:** `question`, `option_a`–`option_d`, `correct_answer`, `question_type`, `question_level`, `topic`, `subdomain`.
 
@@ -350,15 +344,15 @@ overlap = len(en_ids & hi_ids) / len(en_ids) if en_ids else 0
 | Source | Status | How to get |
 |--------|--------|-----------|
 | Internal (`tests/benchmark_questions.json`) | Available | In repo, 20 questions |
-| BhashaBench-Legal Criminal Law (English) | Gated — request access | 1. Request access at HF page. 2. Store token: `databricks secrets put-secret nyaya-dhwani hf_token`. 3. Notebook downloads automatically. |
-| BhashaBench-Legal Criminal Law (Hindi) | Gated — request access | Same dataset, `data_dir="Hindi"` — downloaded in same notebook cell |
+| BhashaBench-Legal Criminal Law (English) | Access approved | Token in secret scope `nyaya-dhwani/hf_token`. Notebook downloads ~2,769 questions automatically. |
+| BhashaBench-Legal Criminal Law (Hindi) | Access approved | Same token, `data_dir="Hindi"` — downloaded in same notebook cell |
 | User-submitted questions | Manual | Collect from app usage logs (with consent) |
 
 **Prerequisite checklist for BBL:**
 
-- [ ] Request access at https://huggingface.co/datasets/bharatgenai/BhashaBench-Legal
-- [ ] Wait for approval (check by visiting the page — if you can see data preview, you're in)
-- [ ] Store HF token: `databricks secrets put-secret nyaya-dhwani hf_token`
+- [x] Request access at https://huggingface.co/datasets/bharatgenai/BhashaBench-Legal
+- [x] Access approved (can preview dataset on HuggingFace)
+- [x] Store HF token: `databricks secrets put-secret nyaya-dhwani hf_token --profile free-aws`
 - [ ] Run the "Download BBL" cell in the benchmark notebook
 
 ## Success criteria

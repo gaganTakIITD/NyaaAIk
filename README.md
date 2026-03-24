@@ -30,6 +30,7 @@ Question (any of 13 languages)
 | [UI Design](docs/UI_design.md) | Designers / developers | UI/UX spec and Sarvam pipeline design |
 | [Playground to App](docs/PLAYGROUND_TO_APP.md) | Developers | Mapping Playground "Get code" to app env vars |
 | [Workspace Setup](docs/WORKSPACE_SETUP.md) | Admins | Databricks secret scopes, GitHub Repos, key rotation |
+| [Benchmark Evaluation](docs/BENCHMARK_EVALUATION.md) | Developers | RAG quality evaluation with BhashaBench-Legal + internal test questions |
 | [Plan](docs/PLAN.md) | Team | Product plan and architecture decisions |
 
 ## Quick start
@@ -48,6 +49,7 @@ export DATABRICKS_CONFIG_PROFILE=free-aws
 # 2. Store secrets
 databricks secrets create-scope nyaya-dhwani
 databricks secrets put-secret nyaya-dhwani sarvam_api_key
+databricks secrets put-secret nyaya-dhwani hf_token          # HuggingFace (for benchmark dataset)
 
 # 3. Run notebooks (on a Databricks cluster)
 #    - notebooks/india_legal_policy_ingest.ipynb  (ingest → legal_rag_corpus table)
