@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Nyaya Dhwani — Benchmark Evaluation
+# MAGIC # NyaaAIk — Benchmark Evaluation
 # MAGIC
 # MAGIC Evaluates the RAG pipeline across 4 dimensions:
 # MAGIC 1. **Retrieval accuracy** — FAISS vs Vector Search
@@ -21,11 +21,11 @@ import os, sys, json, time
 from datetime import datetime, timezone
 
 # --- Set REPO_ROOT to your Databricks Repos checkout path ---
-REPO_ROOT = "/Workspace/Users/shwetha.bhandari@gmail.com/nyaya-dhwani-hackathon"
+REPO_ROOT = "/Workspace/Repos/NyaaAIk"
 sys.path.insert(0, f"{REPO_ROOT}/src")
 
-# LLM config
-os.environ["LLM_OPENAI_BASE_URL"] = "https://7474650313055161.ai-gateway.cloud.databricks.com/mlflow/v1"
+# LLM config — UPDATE with your workspace AI Gateway URL
+os.environ["LLM_OPENAI_BASE_URL"] = os.environ.get("LLM_OPENAI_BASE_URL", "YOUR_WORKSPACE_AI_GATEWAY_URL")
 os.environ["LLM_MODEL"] = "databricks-llama-4-maverick"
 os.environ["DATABRICKS_TOKEN"] = dbutils.secrets.get("nyaya-dhwani", "databricks_token") if "databricks_token" in [s.key for s in dbutils.secrets.list("nyaya-dhwani")] else ""
 
@@ -386,7 +386,7 @@ else:
 # COMMAND ----------
 
 SYSTEM_PROMPT_RAG = (
-    "You are Nyaya Dhwani, an assistant for Indian legal information. "
+    "You are NyaaAIk, an assistant for Indian legal information. "
     "Answer using the Context below when it is relevant. Cite Acts or sections when the context supports it. "
     "If the context is insufficient, say so briefly. "
     "Do not claim to be a lawyer. Keep answers clear and structured. "

@@ -60,8 +60,8 @@ Built on **Databricks** with **Vector Search RAG**, **Llama 4 Maverick** (AI Gat
 
 ## Key Features
 
-- **Live Precedent Search**: Searches Indian Kanoon API for real court cases matching the user's query, with proper citations (case name, court, date, judge)
-- **LLM Query Refinement**: Maverick converts user questions into optimized legal search queries with BNS/IPC section identification
+- **Live Precedent Search**: Searches Indian Kanoon API for real court cases with proper citations
+- **LLM Query Refinement**: Maverick converts user questions into optimized legal search queries
 - **Court Preference**: Filter cases by Supreme Court, High Courts, or District Courts
 - **Argument Style**: Get analysis framed as "in favour", "against", or "balanced"
 - **3-Layer Fallback**: Indian Kanoon API → Google CSE → Pre-loaded Delta Lake cases
@@ -69,27 +69,17 @@ Built on **Databricks** with **Vector Search RAG**, **Llama 4 Maverick** (AI Gat
 ## How it works
 
 ```
-Question (English)
-  → LLM refines query for legal search
-  → Vector Search retrieves BNS/law sections (Chunk Set 1)
-  → Indian Kanoon API fetches live precedent cases
-  → Semantic re-ranking picks top 5-10 most relevant cases
-  → Llama 4 Maverick generates structured legal analysis with citations
-  → Response with case citations + source links
+Question → LLM refines query → Vector Search (BNS sections) + Indian Kanoon API (live cases)
+  → Semantic re-ranking → Llama 4 Maverick → Structured legal analysis with citations
 ```
 
 ## Quick start
 
-### For users
-
-Open the app URL → choose court preference & argument style → ask a question → get cited analysis.
-
 ### For developers
 
 ```bash
-# 1. Authenticate
-databricks auth login --host https://dbc-6651e87a-25a5.cloud.databricks.com --profile free-aws
-export DATABRICKS_CONFIG_PROFILE=free-aws
+# 1. Authenticate (replace with YOUR workspace URL)
+databricks auth login --host https://<your-workspace>.cloud.databricks.com
 
 # 2. Store secrets
 databricks secrets create-scope nyaya-dhwani
@@ -111,12 +101,12 @@ databricks secrets put-secret nyaya-dhwani indian_kanoon_api_token
 ## Repository layout
 
 | Path | Purpose |
-|------|---------
+|------|---------|
 | [`app/main.py`](app/main.py) | Gradio app (RAG + Live Case Search + LLM) |
 | [`app.yaml`](app.yaml) | Databricks Apps entry point + env config |
 | [`src/nyaya_dhwani/`](src/nyaya_dhwani/) | Python package: case_search, embedder, retrieval, llm_client |
-| [`src/nyaya_dhwani/case_search.py`](src/nyaya_dhwani/case_search.py) | Live precedent case search pipeline (Indian Kanoon + Google CSE + fallback) |
-| [`notebooks/`](notebooks/) | Data ingestion + FAISS index build |
+| [`src/nyaya_dhwani/case_search.py`](src/nyaya_dhwani/case_search.py) | Live precedent case search pipeline |
+| [`notebooks/`](notebooks/) | Data ingestion + index build |
 | [`requirements.txt`](requirements.txt) | Databricks Apps pip install |
 | [`tests/`](tests/) | pytest suite + integration tests |
 
@@ -126,17 +116,20 @@ databricks secrets put-secret nyaya-dhwani indian_kanoon_api_token
 |-----------|-----------|
 | LLM | Databricks Llama 4 Maverick (AI Gateway) |
 | Embeddings | `sentence-transformers/all-MiniLM-L6-v2` |
-| Vector search | FAISS (IndexFlatIP) / Databricks Vector Search |
-| Live case search | Indian Kanoon API + Google Custom Search (backup) |
+| Vector search | FAISS / Databricks Vector Search |
+| Live case search | Indian Kanoon API |
 | App framework | Gradio 4.44 on Databricks Apps |
-| Data platform | Databricks (Delta Lake, Unity Catalog, Volumes, Apps, Genie) |
+| Data platform | Databricks (Delta Lake, Unity Catalog, Volumes, Apps) |
 
 ## Databricks technologies used
 
-- **Delta Lake**: Structured storage for legal corpus (BNS, Constitution, court cases)
-- **Apache Spark / PySpark**: Data ingestion and text processing at scale
+- **Delta Lake**: Structured storage for legal corpus
+- **Apache Spark**: Data ingestion and text processing
 - **Unity Catalog + Volumes**: Data governance, index storage
 - **Vector Search / FAISS**: Semantic retrieval for RAG pipeline
 - **AI Gateway**: LLM routing (Llama 4 Maverick)
-- **Databricks Apps**: Production deployment of Gradio frontend
-- **Genie**: Data chunking and exploration
+- **Databricks Apps**: Production deployment
+
+## Author
+
+**Gagan Tak** — IIT Delhi

@@ -1,6 +1,6 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # Setup Databricks Vector Search for Nyaya Dhwani
+# MAGIC # Setup Databricks Vector Search for NyaaAIk
 # MAGIC
 # MAGIC This notebook creates a Vector Search endpoint and Delta Sync index
 # MAGIC backed by the `main.india_legal.legal_rag_corpus` table.

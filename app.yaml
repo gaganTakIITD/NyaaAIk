@@ -1,32 +1,19 @@
 # Databricks Apps runtime — must live at the repository root.
 # https://docs.databricks.com/aws/en/dev-tools/databricks-apps/app-runtime
-#
-# Without this file, Python apps default to: python app.py (this repo uses app/main.py).
 command: ["python", "app/main.py"]
 
 env:
   # LLM via Databricks AI Gateway (Llama 4 Maverick)
+  # UPDATE: Replace with YOUR workspace AI Gateway URL
   - name: "LLM_OPENAI_BASE_URL"
-    value: "https://7474650313055161.ai-gateway.cloud.databricks.com/mlflow/v1"
+    value: "YOUR_WORKSPACE_AI_GATEWAY_URL"
   - name: "LLM_MODEL"
     value: "databricks-llama-4-maverick"
 
-  # Vector Search (primary backend for Chunk Set 1 — BNS/Constitution)
+  # Vector Search (primary backend — BNS/Constitution)
   - name: "NYAYA_RETRIEVAL_BACKEND"
     value: "vector_search"
   - name: "NYAYA_VS_ENDPOINT_NAME"
     value: "nyaya_vs_endpoint"
   - name: "NYAYA_VS_INDEX_NAME"
     value: "main.india_legal.legal_rag_corpus_index"
-
-  # Live case search — Indian Kanoon API
-  # Token is loaded from Databricks secret scope: nyaya-dhwani/indian_kanoon_api_token
-  # Set here as fallback if secret scope is not available.
-  # - name: "INDIAN_KANOON_API_TOKEN"
-  #   value: ""
-
-  # Google Custom Search Engine (backup for Indian Kanoon)
-  # - name: "GOOGLE_API_KEY"
-  #   value: ""
-  # - name: "GOOGLE_CSE_CX"
-  #   value: "e1e7cefca81f84b13"
