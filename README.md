@@ -1,4 +1,4 @@
-# Nyaya Dhwani
+# NyaaAIk
 
 **AI-powered legal research assistant for Indian advocates** — search BNS/IPC provisions, find relevant court precedents with cited cases, and get structured legal analysis.
 

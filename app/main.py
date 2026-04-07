@@ -96,7 +96,7 @@ def _build_system_prompt(argument_style: str, court_filter: str) -> str:
         "all": "Consider precedents from all court levels.",
     }.get(court_filter, "Consider precedents from all court levels.")
 
-    return f"""You are Nyaya Dhwani, an AI legal research assistant for Indian advocates and legal professionals.
+    return f"""You are NyaaAIk, an AI legal research assistant for Indian advocates and legal professionals.
 
 ROLE: Provide detailed legal analysis with proper case citations and statutory references.
 
@@ -303,10 +303,10 @@ def build_app() -> gr.Blocks:
     with gr.Blocks(
         theme=gr.themes.Soft(primary_hue="amber", secondary_hue="slate"),
         css=custom_css,
-        title="Nyaya Dhwani - Legal Research Assistant",
+        title="NyaaAIk - Legal Research Assistant",
     ) as demo:
         gr.Markdown(
-            "# ⚖️ Nyaya Dhwani\n"
+            "# ⚖️ NyaaAIk\n"
             "*AI-powered legal research assistant for Indian advocates*\n\n"
             "Search BNS/IPC provisions and find relevant court precedents with cited cases."
         )
