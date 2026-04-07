@@ -30,6 +30,3 @@ env:
   #   value: ""
   # - name: "GOOGLE_CSE_CX"
   #   value: "e1e7cefca81f84b13"
-
-  # SARVAM_API_KEY is loaded from Databricks secret scope at startup
-  # via _load_secrets_from_scope() in app/main.py
