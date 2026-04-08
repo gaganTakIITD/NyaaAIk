@@ -29,9 +29,10 @@ The core knowledge base of the application relies on two distinct chunk sets man
 * **Process:** These fixed statutory documents are ingested into Databricks, processed into semantic chunks by Genie, and stored as Delta Tables.
 * **Purpose:** Forms the ground truth for statutory law and procedural rules, ensuring the AI responses are firmly rooted in current Indian legal code.
 
-### Chunk Set 2: Precedent Case Law (Fallback Corpus)
+### Chunk Set 2: Precedent Case Law (Fallback Corpus) — *[Planned / Not Implemented]*
+* **Note:** *This component is currently **not implemented** due to the unavailability of a clean, structured offline dataset of Indian case laws. It is part of the architectural roadmap for future robustness.*
 * **Sources:** A curated dataset of approximately 2,000 landmark and high-frequency judgments categorized under primary legal domains (e.g., Murder, Theft, Civil Disputes, Cyber Crime).
-* **Process:** Similar to Chunk Set 1, these cases are fragmented into semantic chunks and stored as Delta Tables.
+* **Process:** Similar to Chunk Set 1, these cases will be fragmented into semantic chunks and stored as Delta Tables.
 * **Purpose:** Acts as a highly reliable fallback reservoir of legal precedent. If live web scraping fails or experiences latency, the system guarantees a baseline of relevant case law citations.
 
 ---
@@ -56,7 +57,7 @@ Raw user queries (especially from citizens) can often be unstructured or lack pr
 ### Step 3.2: Internal Vector Retrieval
 The refined query is executed against the Databricks Vector Search indexes.
 * Retrieves highly relevant, precise statutory clauses from **Chunk Set 1 (BNS)**.
-* Retrieves semantically similar fallback judgments from **Chunk Set 2 (2000 Cases)**.
+* *(Planned)* Retrieves semantically similar fallback judgments from **Chunk Set 2 (2000 Cases)**.
 
 ### Step 3.3: Live Web Searching & Scraping
 Simultaneously, the refined query is used to scrape and search live legal databases (e.g., Indian Kanoon).
@@ -72,7 +73,7 @@ Once the retrieval phase gathers all contextual puzzle pieces, they are fed into
 **The Final Prompt Injection consists of:**
 1. **User Query:** The original user context and question.
 2. **Chunk Set 1 Data:** Relevant statutory laws and constitutional articles.
-3. **Chunk Set 2 Data:** Similar pre-downloaded fallback case laws.
+3. **Chunk Set 2 Data:** Similar pre-downloaded fallback case laws *(Planned)*.
 4. **Live Scraped Cases:** The 5-10 freshly scraped, highly relevant live judgments.
 5. **Pre-defined Operational Prompts:** Dynamic system instructions.
 

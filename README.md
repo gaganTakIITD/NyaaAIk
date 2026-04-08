@@ -50,13 +50,13 @@ flowchart TD
     subgraph DataPlatform[Databricks Data Intelligence Platform]
         direction TB
         BNS[(Chunk Set 1: Delta Tables\nBNS, BNSS, BSA)]
-        FallBk[(Chunk Set 2: Delta Tables\n2000 Case Fallback)]
+        FallBk[/"(Planned) Chunk Set 2:\n2000 Case Fallback"/]
         
         Genie([Databricks Genie\nAuto-Chunking]) --> BNS
-        Genie --> FallBk
+        Genie -.-> FallBk
         
         BNS --> VS1[(Databricks Vector Search\nIndex 1)]
-        FallBk --> VS2[(Databricks Vector Search\nIndex 2)]
+        FallBk -.-> VS2[/"(Planned) Vector Search\nIndex 2"/]
     end
     
     %% Live Searching
@@ -69,7 +69,7 @@ flowchart TD
     Refiner -- Refined Keywords --> Kanoon
 
     VS1 -- "Highly Relevant Statutes" --> Synth
-    VS2 -- "Semantic Fallback Cases" --> Synth
+    VS2 -.-x|"Data Unavailable"| Synth
     Kanoon -- "Top 5-10 Live Cases" --> Synth
 
     %% Synthesis Layer
@@ -84,9 +84,11 @@ flowchart TD
     
     classDef db fill:#ff3621,stroke:#333,stroke-width:1px,color:#fff;
     classDef os fill:#1a73e8,stroke:#333,stroke-width:1px,color:#fff;
+    classDef planned fill:#f0f0f0,stroke:#666,stroke-width:2px,stroke-dasharray: 5 5,color:#666;
     
-    class Gen,VS1,VS2,Refiner db;
+    class Gen,VS1,Refiner db;
     class Synth os;
+    class FallBk,VS2 planned;
 ```
 
 *Note: Highlighted components leverage the open-source Meta Llama 4 Maverick model and extensive Databricks enterprise infrastructure.*
