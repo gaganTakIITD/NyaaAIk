@@ -51,13 +51,13 @@ flowchart TD
     subgraph DataPlatform[Databricks Data Intelligence Platform]
         direction TB
         BNS[(Delta Tables<br/>BNS / BNSS / BSA)]
-        FallBk[/"Planned: Chunk Set 2<br/>2000 Case Fallback"/]
+        FallBk["/Planned: Chunk Set 2<br/>2000 Case Fallback<br/>Not done — data unavailable in cluster"/]
 
         Genie([Databricks Genie<br/>Auto-Chunking]) --> BNS
         Genie -.-> FallBk
 
         BNS --> VS1[(Databricks Vector Search<br/>Index 1)]
-        FallBk -.-> VS2[/"Planned: Vector Search<br/>Index 2"/]
+        FallBk -.-> VS2["/Planned: Vector Search Index 2<br/>Not done — data unavailable in cluster"/]
     end
 
     %% Live Searching
@@ -154,6 +154,26 @@ flowchart TD
         N2_0 --> N2_1 --> N2_2 --> N2_3 --> N2_4 --> N2_5
     end
 
+    subgraph NB3["NOTEBOOK 3 — setup_vector_search.py (Optional)"]
+        direction TB
+        N3_1["Create VS Endpoint: nyaya_vs_endpoint<br/>STANDARD type / 20-50ms latency"]
+        N3_2["Enable CDF on legal_rag_corpus<br/>Required for Delta Sync index"]
+        N3_3["Create Delta Sync Index<br/>legal_rag_corpus_index<br/>Embedding: databricks-bge-large-en"]
+        N3_4["Trigger Sync and Wait for ONLINE<br/>Grant CAN_QUERY to App service principal"]
+
+        N3_1 --> N3_2 --> N3_3 --> N3_4
+    end
+
+    subgraph NB4["NOTEBOOK 4 — run_benchmark.py (Evaluation)"]
+        direction TB
+        B1["Phase 1: Retrieval Eval<br/>FAISS vs Vector Search<br/>Recall@7 and MRR"]
+        B2["Phase 2: MCQ Accuracy<br/>Internal + BhashaBench-Legal<br/>English and Hindi"]
+        B3["Phase 3: Open-Ended Quality<br/>Keyword coverage / chunk recall"]
+        B4["Phase 4: Multilingual<br/>Sarvam translation round-trip<br/>Save results to Delta"]
+
+        B1 --> B2 --> B3 --> B4
+    end
+
     %% ── VOLUME OUTPUT ────────────────────────────────────────────────────
     subgraph VolumeOut["Unity Catalog Volume — nyaya_index"]
         V1["nyaya_index/<br/>corpus.faiss — FAISS index<br/>chunks.parquet — metadata<br/>manifest.json — model info"]
@@ -178,13 +198,21 @@ flowchart TD
 
     T3 --> N2_2
     N2_4 --> V1
+
+    T3 -.->|Optional VS setup| N3_2
+    N3_3 --> VS_IDX[("legal_rag_corpus_index<br/>Databricks Vector Search")]
+
     V1  --> Retriever
+    VS_IDX --> Retriever
     T3  --> Retriever
     Retriever --> Flask --> React
 
+    V1 -.->|Evaluation| B1
+    T3 -.->|Evaluation| B1
+
     %% ── CLASS ASSIGNMENTS ────────────────────────────────────────────────
-    class NB1,NB2 notebook
-    class T1,T2,T3,T4 delta
+    class NB1,NB2,NB3,NB4 notebook
+    class T1,T2,T3,T4,VS_IDX delta
     class V1 volume
     class Retriever,Flask,React app
     class CSV,PDF,HF source
@@ -305,7 +333,9 @@ nyaya-dhwani-hackathon/
 │
 ├── notebooks/
 │   ├── india_legal_policy_ingest.ipynb  ← NOTEBOOK 1: Data ingestion → Delta tables
-│   └── build_rag_index.ipynb            ← NOTEBOOK 2: Build FAISS index → Volume
+│   ├── build_rag_index.ipynb            ← NOTEBOOK 2: Build FAISS index → Volume
+│   ├── setup_vector_search.py           ← NOTEBOOK 3: Create VS endpoint + Delta Sync index (optional)
+│   └── run_benchmark.py                 ← NOTEBOOK 4: RAG evaluation — retrieval / MCQ / multilingual
 │
 ├── frontend/
 │   ├── src/
