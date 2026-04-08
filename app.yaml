@@ -1,5 +1,4 @@
-# Databricks Apps runtime — must live at the repository root.
-# https://docs.databricks.com/aws/en/dev-tools/databricks-apps/app-runtime
+# Databricks Apps runtime — Flask backend
 command: ["python", "app/main.py"]
 
 env:

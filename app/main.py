@@ -1,7 +1,8 @@
-"""Gradio entrypoint: RAG + Maverick + Sarvam (STT / Mayura / Bulbul). See docs/PLAN.md."""
+"""Flask entrypoint: NyaaAIk Legal Research — RAG + Maverick + Live Cases."""
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
@@ -13,126 +14,118 @@ _SRC = _ROOT / "src"
 if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-import gradio as gr
-import numpy as np
+import pandas as pd
+from flask import Flask, request, jsonify, send_from_directory
 
-# ---------- Monkey-patch gradio_client bug (1.3.0 + Gradio 4.44.x) ----------
-# get_api_info() crashes on Chatbot schemas where additionalProperties is True
-# (a bool).  The internal recursive calls use the module-level name, so we must
-# replace the actual function objects in the module namespace.
-import gradio_client.utils as _gc_utils  # noqa: E402
-
-_orig_inner = _gc_utils._json_schema_to_python_type
-_orig_get_type = _gc_utils.get_type
-
-def _safe_inner(schema, defs=None):
-    if not isinstance(schema, dict):
-        return "Any"
-    return _orig_inner(schema, defs)
-
-def _safe_get_type(schema):
-    if not isinstance(schema, dict):
-        return "Any"
-    return _orig_get_type(schema)
-
-# Patch module-level names so internal recursive calls also go through guards.
-_gc_utils._json_schema_to_python_type = _safe_inner
-_gc_utils.get_type = _safe_get_type
-# ---------- End monkey-patch ------------------------------------------------
-
-from nyaya_dhwani.llm_client import chat_completions, extract_assistant_text, rag_user_message
+from nyaya_dhwani.llm_client import chat_completions, extract_assistant_text
 from nyaya_dhwani.retriever import Retriever, get_retriever
-from nyaya_dhwani.sarvam_client import (
-    is_configured as sarvam_configured,
-    numpy_audio_to_wav_bytes,
-    speech_to_text_file,
-    strip_markdown_for_tts,
-    text_to_speech_wav_bytes,
-    transcript_from_stt_response,
-    translate_text,
-    wav_bytes_to_numpy_float32,
+from nyaya_dhwani.case_search import (
+    search_precedent_cases,
+    build_cases_context,
 )
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
 TOPIC_SEEDS: dict[str, str] = {
-    "Tenant rights": "What are my basic rights as a tenant in India regarding eviction and rent increases?",
-    "Divorce law": "What are the grounds for divorce under Indian law for mutual consent?",
-    "Consumer cases": "How do I file a consumer complaint in India for defective goods?",
-    "Property law": "What documents should I check before buying residential property in India?",
-    "Labour rights": "What are an employee's rights regarding notice period and gratuity?",
+    "Theft / Robbery": "What is the punishment for theft under BNS and what are landmark cases?",
+    "Murder / Homicide": "What are the legal provisions for murder under BNS Section 101 and relevant precedents?",
+    "Bail Application": "What are the grounds for granting bail in non-bailable offences under BNSS?",
+    "Divorce Law": "What are the grounds for divorce under Indian law for mutual consent?",
+    "Consumer Cases": "How do I file a consumer complaint in India for defective goods?",
+    "Property Dispute": "What documents should I check before buying residential property in India?",
+    "Domestic Violence": "What legal protections exist for victims of domestic violence in India?",
     "FIR / Police": "What is the procedure to file an FIR and what are my rights when arrested?",
-    "Domestic violence": "What legal protections exist for victims of domestic violence in India?",
-    "RTI": "How do I file a Right to Information application and what fees apply?",
+    "Cyber Crime": "What are the legal provisions for cybercrime and online fraud under BNS?",
+    "Cheque Bounce": "What is the legal process for a cheque bounce case under NI Act Section 138?",
 }
 
-SARVAM_LANGUAGES: list[tuple[str, str]] = [
-    ("en", "English"),
-    ("hi", "Hindi · हिन्दी"),
-    ("bn", "Bengali"),
-    ("te", "Telugu"),
-    ("mr", "Marathi"),
-    ("ta", "Tamil"),
-    ("gu", "Gujarati"),
-    ("kn", "Kannada"),
-    ("ml", "Malayalam"),
-    ("pa", "Punjabi"),
-    ("or", "Odia"),
-    ("ur", "Urdu"),
-    ("as", "Assamese"),
+COURT_CHOICES = [
+    ("All Courts", "all"),
+    ("Supreme Court", "SC"),
+    ("High Courts", "HC"),
+    ("District Courts", "DC"),
 ]
 
-# UI ISO-ish code → BCP-47 for Mayura / STT hints (best-effort for ur/as)
-UI_TO_BCP47: dict[str, str] = {
-    "en": "en-IN",
-    "hi": "hi-IN",
-    "bn": "bn-IN",
-    "te": "te-IN",
-    "mr": "mr-IN",
-    "ta": "ta-IN",
-    "gu": "gu-IN",
-    "kn": "kn-IN",
-    "ml": "ml-IN",
-    "pa": "pa-IN",
-    "or": "od-IN",
-    "ur": "hi-IN",
-    "as": "bn-IN",
-}
+ARGUMENT_STYLE_CHOICES = [
+    ("Balanced Analysis", "neutral"),
+    ("Arguments in Favour", "favour"),
+    ("Arguments Against", "against"),
+]
 
-DISCLAIMER_EN = (
+DISCLAIMER = (
     "This information is for general awareness only and does not constitute legal advice. "
     "Consult a qualified lawyer for your specific situation."
 )
 
-SYSTEM_PROMPT = (
-    "You are Nyaya Dhwani, an assistant for Indian legal information. "
-    "Answer using the Context below when it is relevant. Cite Acts or sections when the context supports it. "
-    "If the context is insufficient, say so briefly. "
-    "Do not claim to be a lawyer. Keep answers clear and structured. "
-    "Respond in English."
-)
+
+# ---------------------------------------------------------------------------
+# System Prompt
+# ---------------------------------------------------------------------------
+
+def _build_system_prompt(argument_style: str, court_filter: str) -> str:
+    style_instruction = {
+        "favour": "Present arguments primarily IN FAVOUR of the querying party. Highlight supporting precedents and legal provisions.",
+        "against": "Present arguments primarily AGAINST the opposing party. Identify weaknesses in potential defenses.",
+        "neutral": "Provide a balanced legal analysis covering arguments from both sides.",
+    }.get(argument_style, "Provide a balanced legal analysis.")
+
+    court_instruction = {
+        "SC": "Prioritize Supreme Court precedents when available.",
+        "HC": "Prioritize High Court precedents when available.",
+        "DC": "Include District Court level precedents when available.",
+        "all": "Consider precedents from all court levels.",
+    }.get(court_filter, "Consider precedents from all court levels.")
+
+    return f"""You are NyaaAIk, an AI legal research assistant for Indian advocates and legal professionals.
+
+ROLE: Provide detailed legal analysis with proper case citations, explanations, and statutory references.
+
+INSTRUCTIONS:
+1. APPLICABLE LAW: Cite specific BNS (Bharatiya Nyaya Sanhita 2023) sections. If relevant, mention the corresponding old IPC sections.
+2. PRECEDENT CASES — Do NOT just cite case names. For each case:
+   - State the FACTS briefly (what happened)
+   - State the RULING (what the court decided)
+   - Explain WHY it is relevant to the user's query
+   - Include the court name, year, and link if available
+3. ARGUMENT STYLE: {style_instruction}
+4. COURT PREFERENCE: {court_instruction}
+5. STRUCTURE your response as:
+   (a) Applicable Legal Provisions (BNS/IPC sections with brief explanation)
+   (b) Relevant Precedents (case name, facts, ruling, and relevance — explained clearly)
+   (c) Legal Analysis (connecting law + cases to the user's situation)
+   (d) Conclusion / Recommendation
+6. If the user asks a follow-up question, use the conversation history to maintain context.
+7. Always end with a brief disclaimer that this is AI-generated legal research.
+
+Respond in English. Be thorough but structured. Explain cases so a layperson can understand."""
 
 
-def bcp47_target(lang: str) -> str:
-    return UI_TO_BCP47.get(lang, "en-IN")
-
+# ---------------------------------------------------------------------------
+# RAG Runtime
+# ---------------------------------------------------------------------------
 
 class RAGRuntime:
-    """Lazy-load retriever (FAISS, Vector Search, or fallback combo)."""
-
     def __init__(self) -> None:
         self._retriever: Retriever | None = None
+        self._loaded = False
 
     def load(self) -> None:
-        if self._retriever is not None:
+        if self._loaded:
             return
-        self._retriever = get_retriever()
-        logger.info("Retriever loaded: %s", type(self._retriever).__name__)
+        self._loaded = True
+        try:
+            self._retriever = get_retriever()
+            logger.info("Retriever loaded: %s", type(self._retriever).__name__)
+        except Exception as e:
+            logger.warning("Could not load retriever (Indian Kanoon only): %s", e)
+            self._retriever = None
 
     @property
-    def retriever(self) -> Retriever:
-        if self._retriever is None:
-            raise RuntimeError("RAGRuntime not loaded")
+    def retriever(self) -> Retriever | None:
         return self._retriever
 
 
@@ -146,7 +139,11 @@ def get_runtime() -> RAGRuntime:
     return _runtime
 
 
-def _format_citations(chunks_df) -> str:
+# ---------------------------------------------------------------------------
+# Citation formatters
+# ---------------------------------------------------------------------------
+
+def _format_law_citations(chunks_df) -> str:
     lines: list[str] = []
     for _, row in chunks_df.iterrows():
         title = row.get("title") or ""
@@ -154,362 +151,185 @@ def _format_citations(chunks_df) -> str:
         doc_type = row.get("doc_type") or ""
         bits = [str(x).strip() for x in (title, source, doc_type) if x and str(x).strip()]
         if bits:
-            lines.append("- " + " · ".join(bits[:3]))
-    return "\n".join(lines) if lines else "(no metadata)"
+            lines.append(" | ".join(bits[:3]))
+    return lines if lines else []
 
 
-def _rag_answer_english(query_en: str) -> tuple[str, str]:
-    """LLM answer in English + citations block."""
+def _format_case_citations(cases: list[dict]) -> list[dict]:
+    if not cases:
+        return []
+    result = []
+    for c in cases:
+        result.append({
+            "title": c.get("title", "Unknown"),
+            "court": c.get("court", ""),
+            "date": c.get("date", ""),
+            "url": c.get("url", ""),
+        })
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Core RAG pipeline
+# ---------------------------------------------------------------------------
+
+def _rag_answer_with_cases(
+    query: str,
+    court_filter: str,
+    argument_style: str,
+    chat_history: list | None = None,
+) -> dict:
     rt = get_runtime()
     rt.load()
-    q = query_en.strip()
-    chunks_df = rt.retriever.search(q, k=7)
-    texts = chunks_df["text"].tolist() if "text" in chunks_df.columns else []
-    user_content = rag_user_message([str(t) for t in texts], q)
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_content},
-    ]
-    raw = chat_completions(messages, max_tokens=2048, temperature=0.2)
-    assistant_en = extract_assistant_text(raw)
-    cites = _format_citations(chunks_df)
-    return assistant_en, cites
+    q = query.strip()
 
-
-_TRANSLATE_CHUNK_LIMIT = 500  # Sarvam Mayura works best with shorter text
-
-
-def _chunked_translate(text: str, *, source: str, target: str) -> str:
-    """Translate long text by splitting into paragraph-sized chunks.
-
-    Sarvam Mayura can silently return the input unchanged for long text.
-    Splitting on paragraph boundaries keeps context while staying within limits.
-    """
-    # Split on double-newlines (paragraphs) or single newlines for lists
-    paragraphs = text.split("\n")
-    chunks: list[str] = []
-    current = ""
-    for para in paragraphs:
-        if len(current) + len(para) + 1 > _TRANSLATE_CHUNK_LIMIT and current:
-            chunks.append(current)
-            current = para
-        else:
-            current = f"{current}\n{para}" if current else para
-    if current:
-        chunks.append(current)
-
-    translated_parts = []
-    for chunk in chunks:
-        if not chunk.strip():
-            translated_parts.append(chunk)
-            continue
+    # --- Chunk Set 1: BNS/Constitution retrieval ---
+    chunks_df = pd.DataFrame()
+    law_context = ""
+    if rt.retriever is not None:
         try:
-            result = translate_text(chunk, source_language_code=source, target_language_code=target)
-            translated_parts.append(result)
+            chunks_df = rt.retriever.search(q, k=7)
+            law_texts = chunks_df["text"].tolist() if "text" in chunks_df.columns else []
+            law_context = "\n\n".join(
+                f"[LAW] {str(t).strip()}" for t in law_texts if t and str(t).strip()
+            )
         except Exception as e:
-            logger.warning("Mayura chunk translate failed, keeping original: %s", e)
-            translated_parts.append(chunk)
-    return "\n".join(translated_parts)
+            logger.warning("Retriever search failed: %s", e)
 
-
-def _maybe_translate(text: str, *, source: str, target: str) -> str:
-    if source == target:
-        return text
-    if not sarvam_configured():
-        return text
-    if len(text) > _TRANSLATE_CHUNK_LIMIT:
-        return _chunked_translate(text, source=source, target=target)
+    # --- Live Case Search ---
     try:
-        return translate_text(text, source_language_code=source, target_language_code=target)
-    except Exception as e:
-        logger.warning("Mayura translate failed, using original: %s", e)
-        return text
-
-
-def text_to_query_english(user_text: str, lang: str) -> str:
-    """Non-English typed input → English for embedding/RAG (Mayura)."""
-    t = user_text.strip()
-    if not t:
-        return t
-    if lang == "en":
-        return t
-    if not sarvam_configured():
-        logger.warning("SARVAM_API_KEY missing — using raw text for retrieval (degraded).")
-        return t
-    return _maybe_translate(t, source="auto", target="en-IN")
-
-
-def resolve_user_message(
-    text: str,
-    audio: tuple[int, np.ndarray] | None,
-    lang: str,
-) -> tuple[str, str]:
-    """Returns ``(user_bubble_text, query_english)``."""
-    text = (text or "").strip()
-    logger.debug("resolve_user_message: text=%r, audio type=%s",
-                 text[:80] if text else "", type(audio).__name__)
-
-    # Prefer typed text over audio (Gradio retains stale audio recordings).
-    if text:
-        q_en = text_to_query_english(text, lang)
-        return (text, q_en)
-
-    # Fall back to audio only when no text was typed.
-    if audio is not None:
-        sr, data = audio
-        if data is not None and len(np.asarray(data)) > 0:
-            if not sarvam_configured():
-                raise RuntimeError("Set SARVAM_API_KEY for voice input (Sarvam STT).")
-            wav = numpy_audio_to_wav_bytes(np.asarray(data), int(sr))
-            mode = os.environ.get("SARVAM_STT_MODE", "translate").strip()
-            lang_hint = bcp47_target(lang) if mode == "transcribe" else None
-            st = speech_to_text_file(
-                wav,
-                mode=mode,
-                language_code=lang_hint,
-            )
-            tr = transcript_from_stt_response(st)
-            if mode == "translate":
-                return (f"🎤 {tr}", tr.strip())
-            q_en = _maybe_translate(tr, source="auto", target="en-IN")
-            return (f"🎤 {tr}", q_en.strip())
-
-    raise ValueError("Type a question or record audio. If you just recorded, wait for the audio to finish processing then try again.")
-
-
-def build_reply_markdown(assistant_en: str, cites: str, lang: str) -> str:
-    """Build response with both English and translated text side by side."""
-    sources_block = f"**Sources (retrieval)**\n{cites}"
-
-    if lang == "en" or not sarvam_configured():
-        return (
-            f"{assistant_en}\n\n---\n{sources_block}"
-            f"\n\n---\n*{DISCLAIMER_EN}*"
+        live_cases, refined = search_precedent_cases(
+            q, court_filter=court_filter, top_k=7, max_fetch_text=5,
         )
-
-    tgt = bcp47_target(lang)
-    body_translated = _maybe_translate(assistant_en, source="en-IN", target=tgt)
-    disc_translated = _maybe_translate(DISCLAIMER_EN, source="en-IN", target=tgt)
-
-    # Side-by-side: translated language first (primary), English below for reference
-    lang_label = dict(SARVAM_LANGUAGES).get(lang, lang)
-    return (
-        f"**{lang_label}:**\n\n{body_translated}\n\n"
-        f"---\n**English:**\n\n{assistant_en}\n\n"
-        f"---\n{sources_block}"
-        f"\n\n---\n*{disc_translated}*"
-    )
-
-
-def maybe_tts(text_markdown: str, lang: str, enabled: bool) -> tuple[int, np.ndarray] | None:
-    if not enabled or not sarvam_configured():
-        return None
-    # Extract the translated-language block (first section before ---).
-    # For bilingual responses, this is "**Lang:**\n\n<translated text>".
-    narrative = text_markdown.split("\n---\n", 1)[0]
-    # Remove the language label header (e.g. "**Kannada:**") for cleaner TTS.
-    import re
-    narrative = re.sub(r"^\*\*[^*]+:\*\*\s*", "", narrative.strip())
-    plain = strip_markdown_for_tts(narrative)
-    if not plain.strip():
-        return None
-    tgt = bcp47_target(lang)
-    try:
-        wav = text_to_speech_wav_bytes(plain, target_language_code=tgt)
-        sr, arr = wav_bytes_to_numpy_float32(wav)
-        return (sr, arr)
     except Exception as e:
-        logger.warning("TTS failed: %s", e)
-        return None
+        logger.warning("Live case search failed: %s", e)
+        live_cases = []
 
+    cases_context = build_cases_context(live_cases)
 
-def run_turn(
-    message: str,
-    audio: tuple[int, np.ndarray] | None,
-    history: list | None,
-    lang: str,
-    tts_on: bool,
-) -> tuple[str, list, tuple[int, np.ndarray] | None, None]:
-    # Tuple pairs [[user, assistant], ...] — default Chatbot format. Avoids
-    # `type="messages"` JSON schemas that break gradio_client api_info on Gradio 4.44.x.
-    # Returns (msg_text, history, tts_audio, audio_in_clear).
-    history = [list(pair) for pair in history] if history else []
-    try:
-        user_show, q_en = resolve_user_message(message, audio, lang)
-        assistant_en, cites = _rag_answer_english(q_en)
-        reply_md = build_reply_markdown(assistant_en, cites, lang)
-        history.append([user_show, reply_md])
-        audio_out = maybe_tts(reply_md, lang, tts_on)
-        return "", history, audio_out, None
-    except Exception as e:
-        logger.exception("run_turn")
-        err = f"**Error:** {e}"
-        history.append([message or "🎤 (audio)", err])
-        return "", history, None, None
+    # --- Build LLM prompt with full history ---
+    system_prompt = _build_system_prompt(argument_style, court_filter)
 
+    user_content = f"""RELEVANT LAW SECTIONS (BNS / Constitution / Statutes):
+{law_context}
 
-def build_app() -> gr.Blocks:
-    custom_css = """
-    /* Light theme */
-    .gradio-container { background-color: #F7F3ED !important; }
-    footer { font-size: 0.85rem; color: #2A5297; }
-    h1 { color: #0D1B3E; font-family: Georgia, serif; }
+PRECEDENT COURT CASES:
+{cases_context}
 
-    /* Dark theme: respect browser/OS preference */
-    @media (prefers-color-scheme: dark) {
-        .gradio-container { background-color: #1a1a2e !important; }
-        h1 { color: #e0d8cc; }
-        footer { color: #8ea4c8; }
+USER QUERY: {q}"""
+
+    messages = [{"role": "system", "content": system_prompt}]
+
+    # Add ALL previous turns for full context
+    if chat_history:
+        for turn in chat_history:
+            if turn.get("role") == "user":
+                messages.append({"role": "user", "content": turn["content"]})
+            elif turn.get("role") == "assistant":
+                messages.append({"role": "assistant", "content": turn["content"]})
+
+    messages.append({"role": "user", "content": user_content})
+
+    raw = chat_completions(messages, max_tokens=4096, temperature=0.2)
+    assistant_text = extract_assistant_text(raw)
+
+    return {
+        "answer": assistant_text,
+        "law_sources": _format_law_citations(chunks_df),
+        "case_sources": _format_case_citations(live_cases),
+        "disclaimer": DISCLAIMER,
     }
-    /* Also handle Gradio's own dark class */
-    .dark .gradio-container { background-color: #1a1a2e !important; }
-    .dark h1 { color: #e0d8cc; }
-    .dark footer { color: #8ea4c8; }
-    """
 
-    with gr.Blocks(
-        theme=gr.themes.Soft(primary_hue="slate", secondary_hue="orange"),
-        css=custom_css,
-        title="Nyaya Dhwani",
-    ) as demo:
-        gr.Markdown(
-            "# Nyaya Dhwani · न्याय ध्वनि\n"
-            "*Legal information assistant for India · Not a substitute for legal counsel*"
-        )
 
-        lang_state = gr.State("en")
+# ---------------------------------------------------------------------------
+# Flask App
+# ---------------------------------------------------------------------------
 
-        with gr.Column(visible=True) as welcome_col:
-            gr.Markdown("### Welcome")
-            lang_radio = gr.Radio(
-                choices=[(c[1], c[0]) for c in SARVAM_LANGUAGES],  # (label, value)
-                value="en",
-                label="Select your language / अपनी भाषा चुनें",
-                info="Non-English questions are translated to English for retrieval, "
-                "then answers are translated back to your language.",
-            )
+app = Flask(__name__, static_folder=str(_ROOT / "app" / "static"))
 
-            begin_btn = gr.Button("Begin / शुरू करें", variant="primary")
-            gr.Markdown(
-                "<small>Not a substitute for legal counsel · General information only · "
-                "Powered by Sarvam (STT / translate / TTS) when configured</small>"
-            )
 
-        with gr.Column(visible=False) as chat_col:
-            gr.Markdown("### Chat")
-            current_lang = gr.Markdown("*Session language: English*")
+@app.route("/")
+def index():
+    return send_from_directory(str(Path(__file__).parent / "static"), "index.html")
 
-            topic = gr.Radio(
-                choices=list(TOPIC_SEEDS.keys()),
-                label="Common topics",
-                value=None,
-            )
-            chatbot = gr.Chatbot(
-                label="Nyaya Dhwani",
-                height=420,
-                bubble_full_width=False,
-            )
-            msg = gr.Textbox(
-                placeholder="Type your legal question in any supported language…",
-                show_label=False,
-                lines=2,
-            )
-            audio_in = gr.Audio(
-                sources=["microphone"],
-                type="numpy",
-                label="Or speak your question",
-            )
-            tts_cb = gr.Checkbox(
-                label="Read answer aloud",
-                value=True,
-            )
-            tts_out = gr.Audio(
-                label="Listen to answer",
-                type="numpy",
-                interactive=False,
-            )
-            submit = gr.Button("Send", variant="primary")
 
-        def on_begin(lang_code: str):
-            labels = dict(SARVAM_LANGUAGES)
-            label = labels.get(lang_code, lang_code)
-            return (
-                gr.update(visible=False),
-                gr.update(visible=True),
-                lang_code,
-                f"*Session language: {label}*",
-            )
+@app.route("/static/<path:filename>")
+def serve_static(filename):
+    return send_from_directory(str(Path(__file__).parent / "static"), filename)
 
-        begin_btn.click(
-            on_begin,
-            inputs=[lang_radio],
-            outputs=[welcome_col, chat_col, lang_state, current_lang],
-        )
 
-        def fill_topic(choice: str | None):
-            if not choice:
-                return gr.update()
-            seed = TOPIC_SEEDS.get(choice, "")
-            return gr.update(value=seed)
+@app.route("/api/chat", methods=["POST"])
+def api_chat():
+    data = request.get_json()
+    query = data.get("query", "").strip()
+    court = data.get("court", "all")
+    style = data.get("style", "neutral")
+    history = data.get("history", [])
 
-        topic.change(fill_topic, inputs=[topic], outputs=[msg])
+    if not query:
+        return jsonify({"error": "Please enter a legal question."}), 400
 
-        _run_turn_io = dict(
-            fn=run_turn,
-            inputs=[msg, audio_in, chatbot, lang_state, tts_cb],
-            outputs=[msg, chatbot, tts_out, audio_in],
-        )
-        submit.click(**_run_turn_io)
-        msg.submit(**_run_turn_io)
-        # Auto-submit when the user stops recording (so they don't need to click Send).
-        audio_in.stop_recording(**_run_turn_io)
+    try:
+        result = _rag_answer_with_cases(query, court, style, history)
+        return jsonify(result)
+    except Exception as e:
+        logger.exception("api_chat error")
+        return jsonify({"error": str(e)}), 500
 
-        gr.Markdown(
-            "<small>Powered by Databricks (Llama Maverick + Vector Search) · "
-            "Sarvam AI (translation, speech-to-text, text-to-speech)</small>"
-        )
 
-    return demo
+@app.route("/api/topics", methods=["GET"])
+def api_topics():
+    return jsonify(TOPIC_SEEDS)
 
+
+@app.route("/api/health", methods=["GET"])
+def api_health():
+    return jsonify({"status": "ok", "app": "NyaaAIk"})
+
+
+# ---------------------------------------------------------------------------
+# Secrets loading
+# ---------------------------------------------------------------------------
 
 def _load_secrets_from_scope() -> None:
-    """Load secrets from Databricks secret scope into env vars (for Databricks Apps).
-
-    The Apps UI secret resources don't always wire through reliably.
-    Fall back to reading from the workspace secret scope via the SDK,
-    the same way notebooks do with dbutils.secrets.get().
-    """
     mapping = {
-        "SARVAM_API_KEY": ("nyaya-dhwani", "sarvam_api_key"),
+        "INDIAN_KANOON_API_TOKEN": ("nyaya-dhwani", "indian_kanoon_api_token"),
     }
     for env_var, (scope, key) in mapping.items():
         if os.environ.get(env_var, "").strip():
-            continue  # already set (e.g. locally or via Apps resource)
+            continue
         try:
             from databricks.sdk import WorkspaceClient
             w = WorkspaceClient()
             val = w.secrets.get_secret(scope=scope, key=key)
             if val and val.value:
                 import base64
-                # SDK get_secret returns base64-encoded value
                 try:
                     decoded = base64.b64decode(val.value).decode("utf-8")
                 except Exception:
-                    decoded = val.value  # fallback: maybe it's already plain text
+                    decoded = val.value
                 os.environ[env_var] = decoded
-                logger.info("Loaded %s from secret scope %s/%s", env_var, scope, key)
+                logger.info("Loaded %s from scope %s/%s", env_var, scope, key)
         except Exception as exc:
-            logger.warning("Could not load %s from secret scope: %s", env_var, exc)
+            logger.warning("Could not load %s: %s", env_var, exc)
 
+
+# ---------------------------------------------------------------------------
+# Entrypoint
+# ---------------------------------------------------------------------------
 
 def main() -> None:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
     _load_secrets_from_scope()
-    demo = build_app()
-    demo.queue()
-    # Match Databricks app-templates: bare launch() lets the platform
-    # inject GRADIO_SERVER_NAME, GRADIO_SERVER_PORT, GRADIO_ROOT_PATH etc.
-    demo.launch()
+
+    logger.info("Indian Kanoon API: %s",
+                "configured" if os.environ.get("INDIAN_KANOON_API_TOKEN") else "NOT configured")
+
+    port = int(os.environ.get("PORT", os.environ.get("FLASK_RUN_PORT", "8000")))
+    host = os.environ.get("FLASK_RUN_HOST", "0.0.0.0")
+
+    logger.info("Starting NyaaAIk on %s:%d", host, port)
+    app.run(host=host, port=port, debug=False)
 
 
 if __name__ == "__main__":
