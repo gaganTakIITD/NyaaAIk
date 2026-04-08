@@ -41,6 +41,7 @@ from nyaya_dhwani.case_search import (
     search_precedent_cases,
     build_cases_context,
 )
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -124,17 +125,21 @@ class RAGRuntime:
 
     def __init__(self) -> None:
         self._retriever: Retriever | None = None
+        self._loaded = False
 
     def load(self) -> None:
-        if self._retriever is not None:
+        if self._loaded:
             return
-        self._retriever = get_retriever()
-        logger.info("Retriever loaded: %s", type(self._retriever).__name__)
+        self._loaded = True
+        try:
+            self._retriever = get_retriever()
+            logger.info("Retriever loaded: %s", type(self._retriever).__name__)
+        except Exception as e:
+            logger.warning("Could not load retriever (will use Indian Kanoon only): %s", e)
+            self._retriever = None
 
     @property
-    def retriever(self) -> Retriever:
-        if self._retriever is None:
-            raise RuntimeError("RAGRuntime not loaded")
+    def retriever(self) -> Retriever | None:
         return self._retriever
 
 
@@ -202,11 +207,19 @@ def _rag_answer_with_cases(
     q = query.strip()
 
     # --- Chunk Set 1: BNS/Constitution/Law retrieval ---
-    chunks_df = rt.retriever.search(q, k=7)
-    law_texts = chunks_df["text"].tolist() if "text" in chunks_df.columns else []
-    law_context = "\n\n".join(
-        f"[LAW] {str(t).strip()}" for t in law_texts if t and str(t).strip()
-    )
+    chunks_df = pd.DataFrame()
+    law_context = ""
+    if rt.retriever is not None:
+        try:
+            chunks_df = rt.retriever.search(q, k=7)
+            law_texts = chunks_df["text"].tolist() if "text" in chunks_df.columns else []
+            law_context = "\n\n".join(
+                f"[LAW] {str(t).strip()}" for t in law_texts if t and str(t).strip()
+            )
+        except Exception as e:
+            logger.warning("Retriever search failed: %s", e)
+    else:
+        logger.info("No retriever available — using Indian Kanoon only")
 
     # --- Live Case Search (Indian Kanoon API) ---
     try:
