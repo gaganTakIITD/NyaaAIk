@@ -1,10 +1,6 @@
-# NyaaAIk app dependencies — Databricks Apps compatible
-# cache-bust: 2026-04-08
 flask>=3.0.3
 pandas~=2.2.3
 databricks-sdk
 requests>=2.32.0
-# Document text extraction (lightweight — Maverick handles the heavy reasoning)
 pypdf>=3.17.0
 python-docx>=1.1.2
--e ".[rag,rag_embed,app]"

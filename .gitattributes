@@ -1,0 +1,23 @@
+# Force LF line endings on all text files so Databricks (Linux) can parse them correctly
+* text=auto eol=lf
+
+# Explicitly LF for files that must not have CRLF
+*.yaml    text eol=lf
+*.yml     text eol=lf
+*.json    text eol=lf
+*.py      text eol=lf
+*.jsx     text eol=lf
+*.js      text eol=lf
+*.css     text eol=lf
+*.html    text eol=lf
+*.md      text eol=lf
+*.toml    text eol=lf
+*.txt     text eol=lf
+
+# Binaries — no newline conversion
+*.png     binary
+*.jpg     binary
+*.webp    binary
+*.gif     binary
+*.ico     binary
+*.woff2   binary
