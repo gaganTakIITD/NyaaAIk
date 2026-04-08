@@ -140,7 +140,14 @@ def speech_to_text_file(
     """POST ``/speech-to-text`` (multipart). Use ``mode=translate`` for English transcript."""
     url = os.environ.get("SARVAM_STT_URL", DEFAULT_STT_URL).strip()
     model = model or os.environ.get("SARVAM_STT_MODEL", "saaras:v3").strip()
-    files = {"file": (filename, file_bytes, "audio/wav")}
+    _MIME_MAP = {
+        "wav": "audio/wav", "mp3": "audio/mpeg", "mp4": "audio/mp4",
+        "webm": "audio/webm", "ogg": "audio/ogg", "flac": "audio/flac",
+    }
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "webm"
+    mime = _MIME_MAP.get(ext, "audio/webm")
+    files = {"file": (filename, file_bytes, mime)}
+
     data: dict[str, str] = {"model": model, "mode": mode}
     if language_code:
         data["language_code"] = language_code

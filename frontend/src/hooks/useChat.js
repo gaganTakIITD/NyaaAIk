@@ -170,7 +170,7 @@ export function useChat() {
     } finally {
       setIsLoading(false)
     }
-  }, [activeId, isLoading, court, style, conversations])
+  }, [activeId, isLoading, court, style, persona, conversations])
 
   const clearError = useCallback(() => setError(null), [])
 
