@@ -1,7 +1,12 @@
 # NyaaAIk — AI-Powered Legal Research Assistant
 
 > **Bharat Bricks Hacks 2026 · IIT Delhi**
-> Built on Databricks · Powered by Llama 4 Maverick · Indian Law RAG
+> Built on Databricks · Powered by Meta Llama 4 Maverick · Indian Law RAG
+
+## 📖 Project Story & Motivation
+The motivation behind NyaaAIk is to democratize the accessibility and affordability of legal resources in India. Navigating the Indian judicial system can be daunting and prohibitively expensive for the average citizen. 
+
+NyaaAIk is a **Databricks-native legal assistant** using **Llama 4 Maverick** and **Sarvam Saaras v3**. It employs a state-of-the-art Hybrid RAG architecture: Databricks Genie autonomously chunks statutory laws into Delta Tables, synced natively with Vector Search. Simultaneously, an LLM refines user queries for parallel semantic vector retrieval and live web scraping of recent rulings. This bridges the gap—providing courtroom-grade insight to advocates while translating complex statutory laws into actionable, plain-language guidance for everyday citizens.
 
 ---
 
