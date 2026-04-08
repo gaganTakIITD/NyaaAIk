@@ -81,9 +81,16 @@ export function useSarvamVoice({ onTranscript, language = 'hi-IN' } = {}) {
         const resp = await fetch('/api/transcribe', { method: 'POST', body: formData })
         const data = await resp.json()
 
-        if (!resp.ok) throw new Error(data.error || 'Transcription failed')
-        if (data.transcript) {
-          onTranscript?.(data.transcript)
+        if (resp.status === 503) {
+          setError('Sarvam API key is not configured on the server.')
+        } else if (!resp.ok) {
+          throw new Error(data.error || `Transcription failed (${resp.status})`)
+        } else if (data.transcript && data.transcript.trim()) {
+          onTranscript?.(data.transcript.trim())
+        } else if (data.error) {
+          setError(data.error)
+        } else {
+          setError('No speech detected. Please speak clearly and try again.')
         }
       } catch (e) {
         setError(e.message || 'Transcription failed. Please try again.')

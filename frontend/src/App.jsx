@@ -11,6 +11,7 @@ import { useDocuments } from './hooks/useDocuments.js'
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [inputText, setInputText] = useState('')
+  const [persona, setPersona] = useState('advocate')  // managed here, never stale
 
   // Theme — persisted to localStorage, applied to <html data-theme>
   const [theme, setTheme] = useState(() => localStorage.getItem('nyaaaik_theme') || 'dark')
@@ -27,7 +28,6 @@ export default function App() {
     selectConversation, startNewChat, deleteConversation,
     sendMessage, isLoading, error, clearError,
     court, setCourt, style, setStyle,
-    persona, setPersona,
   } = useChat()
 
   const {
@@ -41,9 +41,9 @@ export default function App() {
   }, [])
 
   const handleSend = useCallback((text) => {
-    sendMessage(text, activeDocIds)
+    sendMessage(text, activeDocIds, persona)  // persona passed directly — always current
     setInputText('')
-  }, [sendMessage, activeDocIds])
+  }, [sendMessage, activeDocIds, persona])
 
   // Auto-close sidebar on mobile
   useEffect(() => {

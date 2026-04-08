@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { apiChat } from '../utils/api.js'
 
 const STORAGE_KEY = 'nyaaaik_conversations'
@@ -53,7 +53,6 @@ export function useChat() {
   const [error, setError] = useState(null)
   const [court, setCourt] = useState('all')
   const [style, setStyle] = useState('neutral')
-  const [persona, setPersona] = useState('advocate')
 
   // Persist to localStorage whenever conversations change
   useEffect(() => {
@@ -101,11 +100,8 @@ export function useChat() {
     })
   }, [conversations])
 
-  // Keep a ref so sendMessage always has the latest persona without stale closure issues
-  const personaRef = useRef(persona)
-  useEffect(() => { personaRef.current = persona }, [persona])
-
-  const sendMessage = useCallback(async (query, docIds = []) => {
+  // persona is passed as a direct argument — no stale closure possible
+  const sendMessage = useCallback(async (query, docIds = [], persona = 'advocate') => {
     if (!query.trim() || isLoading) return
 
     const userMsg = {
@@ -140,7 +136,7 @@ export function useChat() {
         query: query.trim(),
         court,
         style,
-        persona: personaRef.current,   // always fresh — never stale
+        persona,   // passed directly as argument — always fresh
         history,
         docIds,
       })
@@ -185,6 +181,5 @@ export function useChat() {
     clearError,
     court, setCourt,
     style, setStyle,
-    persona, setPersona,
   }
 }
