@@ -204,60 +204,15 @@ env:
 
 ### STEP 4 — Set Up Databricks Secret Scope
 
-This stores API keys securely. Run the following in a **Databricks notebook** (not locally):
+This stores API keys securely. Instead of writing code, you can use the pre-built notebook:
 
-**Cell 1 — Get workspace context**
-```python
-import requests
+1. In your Databricks Workspace, click **Workspace → Import**.
+2. Select the **`setup_secrets.py`** file from this repository.
+3. Databricks will automatically open it as a rich, interactive Notebook.
+4. Open the notebook, paste your **Indian Kanoon** and **Sarvam** API keys into the designated cells.
+5. Click **Run All** to securely save your secrets to the Databricks Vault.
 
-ctx   = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
-HOST  = ctx.apiUrl().get()
-TOKEN = ctx.apiToken().get()
-HEADERS = {"Authorization": f"Bearer {TOKEN}"}
-print("Host:", HOST)
-```
-
-**Cell 2 — Create the secret scope**
-```python
-r = requests.post(f"{HOST}/api/2.0/secrets/scopes/create",
-    headers=HEADERS,
-    json={"scope": "nyaya-dhwani", "initial_manage_principal": "users"})
-print(r.status_code, r.text)
-# 200 = created   |   RESOURCE_ALREADY_EXISTS = already exists (both OK)
-```
-
-**Cell 3 — Store Indian Kanoon API token**
-```python
-r = requests.post(f"{HOST}/api/2.0/secrets/put",
-    headers=HEADERS,
-    json={
-        "scope": "nyaya-dhwani",
-        "key":   "indian_kanoon_api_token",
-        "string_value": "YOUR_INDIAN_KANOON_TOKEN_HERE"
-    })
-print(r.status_code, r.text)
-```
-
-**Cell 4 — Store Sarvam API key**
-```python
-r = requests.post(f"{HOST}/api/2.0/secrets/put",
-    headers=HEADERS,
-    json={
-        "scope": "nyaya-dhwani",
-        "key":   "sarvam_api_key",
-        "string_value": "YOUR_SARVAM_API_KEY_HERE"
-    })
-print(r.status_code, r.text)
-```
-
-**Cell 5 — Verify**
-```python
-r = requests.get(f"{HOST}/api/2.0/secrets/list?scope=nyaya-dhwani", headers=HEADERS)
-print(r.json())
-# Expected: {'secrets': [{'key': 'indian_kanoon_api_token', ...}, {'key': 'sarvam_api_key', ...}]}
-```
-
-> ✅ Values always show as `[REDACTED]` in Databricks — that is correct behaviour.
+> ✅ Values always show as `[REDACTED]` in Databricks logs — that is correct behaviour.
 
 ---
 
