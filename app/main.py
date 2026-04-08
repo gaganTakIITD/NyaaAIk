@@ -305,85 +305,222 @@ def run_turn(
 
 def build_app() -> gr.Blocks:
     custom_css = """
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
     .gradio-container {
-        background: linear-gradient(135deg, #0D1B3E 0%, #1a2a4a 50%, #2a3a5a 100%) !important;
+        background: #0f172a !important;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+        max-width: 900px !important;
+        margin: 0 auto !important;
     }
-    h1 { color: #F4D03F; font-family: Georgia, serif; }
-    h3, .markdown-text { color: #e0d8cc; }
-    footer { font-size: 0.85rem; color: #8ea4c8; }
+
+    /* Header */
+    .header-block {
+        text-align: center;
+        padding: 2rem 1rem 1rem;
+    }
+    .header-block h1 {
+        font-size: 2.2rem;
+        font-weight: 700;
+        color: #f8fafc;
+        margin: 0;
+        letter-spacing: -0.5px;
+    }
+    .header-block h1 span { color: #fbbf24; }
+    .header-block p {
+        color: #94a3b8;
+        font-size: 0.95rem;
+        margin-top: 0.3rem;
+    }
+
+    /* Cards */
+    .gr-panel, .gr-box, .gr-form {
+        background: #1e293b !important;
+        border: 1px solid #334155 !important;
+        border-radius: 12px !important;
+    }
+
+    /* Labels */
+    label, .gr-input-label, span.text-lg {
+        color: #cbd5e1 !important;
+        font-weight: 500 !important;
+        font-size: 0.85rem !important;
+    }
+
+    /* Radio buttons */
+    .gr-radio-row label {
+        background: #1e293b !important;
+        border: 1px solid #475569 !important;
+        border-radius: 8px !important;
+        color: #e2e8f0 !important;
+        transition: all 0.2s ease;
+    }
+    .gr-radio-row label:hover {
+        border-color: #fbbf24 !important;
+    }
+    .gr-radio-row input:checked + label {
+        background: #fbbf24 !important;
+        color: #0f172a !important;
+        border-color: #fbbf24 !important;
+        font-weight: 600 !important;
+    }
+
+    /* Chat bubbles */
+    .message {
+        border-radius: 12px !important;
+        font-size: 0.9rem !important;
+        line-height: 1.65 !important;
+    }
+    .user .message-bubble-border {
+        background: #1d4ed8 !important;
+        border: none !important;
+    }
+    .bot .message-bubble-border {
+        background: #1e293b !important;
+        border: 1px solid #334155 !important;
+    }
+
+    /* Input */
+    textarea, input[type="text"] {
+        background: #1e293b !important;
+        border: 1px solid #475569 !important;
+        color: #f1f5f9 !important;
+        border-radius: 10px !important;
+        font-size: 0.9rem !important;
+    }
+    textarea:focus {
+        border-color: #fbbf24 !important;
+        box-shadow: 0 0 0 2px rgba(251,191,36,0.15) !important;
+    }
+
+    /* Primary button */
+    .gr-button-primary {
+        background: #fbbf24 !important;
+        color: #0f172a !important;
+        font-weight: 600 !important;
+        border-radius: 10px !important;
+        border: none !important;
+        font-size: 0.9rem !important;
+        transition: all 0.2s ease;
+    }
+    .gr-button-primary:hover {
+        background: #f59e0b !important;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(251,191,36,0.25);
+    }
+
+    /* Accordion */
+    .gr-accordion {
+        border: 1px solid #334155 !important;
+        border-radius: 12px !important;
+        background: #1e293b !important;
+    }
+
+    /* Chatbot container */
+    .chatbot {
+        background: #0f172a !important;
+        border: 1px solid #334155 !important;
+        border-radius: 12px !important;
+    }
+
+    /* Footer */
+    .footer-block p, .footer-block span {
+        color: #64748b !important;
+        font-size: 0.75rem !important;
+        text-align: center;
+    }
+
+    /* Topic pills */
+    .topic-row .gr-radio-row label {
+        font-size: 0.8rem !important;
+        padding: 6px 14px !important;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
     """
 
     with gr.Blocks(
-        theme=gr.themes.Soft(primary_hue="amber", secondary_hue="slate"),
+        theme=gr.themes.Base(
+            primary_hue=gr.themes.colors.amber,
+            secondary_hue=gr.themes.colors.slate,
+            neutral_hue=gr.themes.colors.slate,
+        ),
         css=custom_css,
-        title="NyaaAIk - Legal Research Assistant",
+        title="NyaaAIk — AI Legal Research",
     ) as demo:
-        gr.Markdown(
-            "# ⚖️ NyaaAIk\n"
-            "*AI-powered legal research assistant for Indian advocates*\n\n"
-            "Search BNS/IPC provisions and find relevant court precedents with cited cases."
+
+        # ---- Header ----
+        gr.HTML(
+            '<div class="header-block">'
+            '<h1>⚖️ <span>NyaaAIk</span></h1>'
+            '<p>AI Legal Research Assistant for Indian Advocates</p>'
+            '</div>'
         )
 
-        # ---- Research Settings ----
-        with gr.Accordion("⚙️ Research Settings", open=True):
-            with gr.Row():
-                court_radio = gr.Radio(
-                    choices=[(label, val) for label, val in COURT_CHOICES],
-                    value="all",
-                    label="Court Preference",
-                    info="Filter precedent cases by court level",
-                )
-                style_radio = gr.Radio(
-                    choices=[(label, val) for label, val in ARGUMENT_STYLE_CHOICES],
-                    value="neutral",
-                    label="Argument Style",
-                    info="How the analysis should be framed",
-                )
+        # ---- Settings row ----
+        with gr.Row(equal_height=True):
+            court_radio = gr.Radio(
+                choices=[(label, val) for label, val in COURT_CHOICES],
+                value="all",
+                label="Court",
+            )
+            style_radio = gr.Radio(
+                choices=[(label, val) for label, val in ARGUMENT_STYLE_CHOICES],
+                value="neutral",
+                label="Style",
+            )
 
-        # ---- Topic chips ----
+        # ---- Quick topics ----
         topic = gr.Radio(
             choices=list(TOPIC_SEEDS.keys()),
-            label="📌 Common Legal Topics (click to fill)",
+            label="Quick Topics",
             value=None,
+            elem_classes=["topic-row"],
         )
 
-        # ---- Chat area ----
+        # ---- Chat ----
         chatbot = gr.Chatbot(
-            label="Legal Research",
-            height=500,
+            height=480,
+            show_label=False,
             bubble_full_width=False,
+            avatar_images=(None, None),
         )
 
         with gr.Row():
             msg = gr.Textbox(
-                placeholder="Ask your legal question... e.g. 'What is punishment for theft under BNS?'",
+                placeholder="Type your legal question here...",
                 show_label=False,
-                lines=2,
-                scale=4,
+                lines=1,
+                scale=5,
+                container=False,
             )
-            submit = gr.Button("🔍 Search", variant="primary", scale=1)
+            submit = gr.Button("Search", variant="primary", scale=1, min_width=100)
 
-        # ---- Event handlers ----
+        # ---- Handlers ----
         def fill_topic(choice: str | None):
             if not choice:
                 return gr.update()
-            seed = TOPIC_SEEDS.get(choice, "")
-            return gr.update(value=seed)
+            return gr.update(value=TOPIC_SEEDS.get(choice, ""))
 
         topic.change(fill_topic, inputs=[topic], outputs=[msg])
 
-        _run_turn_io = dict(
+        _io = dict(
             fn=run_turn,
             inputs=[msg, chatbot, court_radio, style_radio],
             outputs=[msg, chatbot],
         )
-        submit.click(**_run_turn_io)
-        msg.submit(**_run_turn_io)
+        submit.click(**_io)
+        msg.submit(**_io)
 
-        gr.Markdown(
-            "<small>Powered by **Databricks** (Llama 4 Maverick + Vector Search) | "
-            "**Indian Kanoon API** (precedent search) | "
-            "Not legal advice — consult a qualified lawyer.</small>"
+        # ---- Footer ----
+        gr.HTML(
+            '<div class="footer-block">'
+            '<p>Powered by Databricks (Llama 4 Maverick + Vector Search) · Indian Kanoon API · '
+            'Not legal advice — consult a qualified lawyer</p>'
+            '</div>'
         )
 
     return demo
