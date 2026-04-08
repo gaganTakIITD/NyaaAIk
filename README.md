@@ -4,7 +4,8 @@
 > Built on Databricks · Powered by Meta Llama 4 Maverick · Indian Law RAG
 
 ## 📖 Project Story & Motivation
-The motivation behind NyaaAIk is to democratize the accessibility and affordability of legal resources in India. Navigating the Indian judicial system can be daunting and prohibitively expensive for the average citizen. 
+
+The motivation behind NyaaAIk is to democratize the accessibility and affordability of legal resources in India. Navigating the Indian judicial system can be daunting and prohibitively expensive for the average citizen.
 
 NyaaAIk is a **Databricks-native legal assistant** using **Llama 4 Maverick** and **Sarvam Saaras v3**. It employs a state-of-the-art Hybrid RAG architecture: Databricks Genie autonomously chunks statutory laws into Delta Tables, synced natively with Vector Search. Simultaneously, an LLM refines user queries for parallel semantic vector retrieval and live web scraping of recent rulings. This bridges the gap—providing courtroom-grade insight to advocates while translating complex statutory laws into actionable, plain-language guidance for everyday citizens.
 
@@ -45,20 +46,20 @@ NyaaAIk is an AI legal assistant for Indian users that:
 flowchart TD
     %% Base Inputs
     U[User Query] --> Refiner[LLM Query Refiner\n(Llama 4 Maverick)]
-    
+
     %% Ingestion & Vector Search Pipeline
     subgraph DataPlatform[Databricks Data Intelligence Platform]
         direction TB
         BNS[(Chunk Set 1: Delta Tables\nBNS, BNSS, BSA)]
         FallBk[/"(Planned) Chunk Set 2:\n2000 Case Fallback"/]
-        
+
         Genie([Databricks Genie\nAuto-Chunking]) --> BNS
         Genie -.-> FallBk
-        
+
         BNS --> VS1[(Databricks Vector Search\nIndex 1)]
         FallBk -.-> VS2[/"(Planned) Vector Search\nIndex 2"/]
     end
-    
+
     %% Live Searching
     subgraph WebScraping[Live Web Scraping]
         Kanoon([Indian Kanoon API])
@@ -69,7 +70,7 @@ flowchart TD
     Refiner -- Refined Keywords --> Kanoon
 
     VS1 -- "Highly Relevant Statutes" --> Synth
-    VS2 -.-x|"Data Unavailable"| Synth
+    VS2 -.->|"Data Unavailable"| Synth
     Kanoon -- "Top 5-10 Live Cases" --> Synth
 
     %% Synthesis Layer
@@ -81,17 +82,213 @@ flowchart TD
 
     %% Output
     Synth --> Out[Generation:\nStructured Legal Response\n+ Properly Cited Cases]
-    
+
     classDef db fill:#ff3621,stroke:#333,stroke-width:1px,color:#fff;
     classDef os fill:#1a73e8,stroke:#333,stroke-width:1px,color:#fff;
     classDef planned fill:#f0f0f0,stroke:#666,stroke-width:2px,stroke-dasharray: 5 5,color:#666;
-    
+
     class Gen,VS1,Refiner db;
     class Synth os;
     class FallBk,VS2 planned;
 ```
 
 *Note: Highlighted components leverage the open-source Meta Llama 4 Maverick model and extensive Databricks enterprise infrastructure.*
+
+---
+
+## 🗃️ Databricks Notebook Pipeline — How We Build the RAG Index
+
+The entire data pipeline that powers NyaaAIk's legal knowledge base is run through **two Databricks notebooks**, executed in sequence inside the workspace. The diagram below shows exactly what each notebook does and how data flows end-to-end from raw law files to the deployed app.
+
+### End-to-End Pipeline Diagram
+
+```mermaid
+flowchart TD
+    classDef notebook fill:#1a3c6e,stroke:#4a90d9,stroke-width:2px,color:#fff
+    classDef delta fill:#cc3300,stroke:#ff6644,stroke-width:2px,color:#fff
+    classDef volume fill:#2d6a4f,stroke:#52b788,stroke-width:2px,color:#fff
+    classDef app fill:#1a5c1a,stroke:#52b788,stroke-width:2px,color:#fff
+    classDef source fill:#444,stroke:#999,stroke-width:1px,color:#fff
+
+    %% ── RAW DATA SOURCES ─────────────────────────────────────────────────
+    subgraph Sources["📥 Raw Data Sources"]
+        CSV["BNS Sections CSV\n(Volume upload or GitHub mirror)"]
+        PDF["Official Law PDFs\nBNS · BNSS · BSA · Constitution\n(MHA Gazette / Indiacode.nic.in)"]
+        HF["Hugging Face Dataset\nIPC ↔ BNS Mapping\n(nandhakumarg/IPC_and_BNS_transformation)"]
+    end
+
+    %% ── NOTEBOOK 1 ───────────────────────────────────────────────────────
+    subgraph NB1["📓 NOTEBOOK 1 — india_legal_policy_ingest.ipynb"]
+        direction TB
+        N1_0["Step 0: Install Dependencies\npip install requests pandas bs4 pymupdf openpyxl"]
+        N1_1["Step 1: Config & Helpers\nRead secrets from nyaya-dhwani scope\nCATALOG=main · SCHEMA=india_legal · VOLUME=legal_files"]
+        N1_1b["Step 1b: Sarvam Connectivity Test\nOptional ping to sarvam.ai API"]
+        N1_2["Step 2: Unity Catalog Setup\nCREATE DATABASE IF NOT EXISTS main.india_legal\nCREATE VOLUME  IF NOT EXISTS legal_files\nMkdir /Volumes/main/india_legal/legal_files/pdfs"]
+        N1_3["Step 3: Load BNS Sections\n① Try Volume CSV paths\n② Fallback: GitHub mirrors\n③ Fallback: PDF + ai_parse_document + Sarvam"]
+        N1_4["Step 3c: Download Official Law PDFs\nBNS · BNSS · BSA · Constitution\nSaved to Unity Catalog Volume"]
+        N1_5["Step 4: BNS ↔ IPC Mapping Table\nFetch from Hugging Face\nFallback: 7-row built-in stub"]
+        N1_6["Step 5: Build legal_rag_corpus\nMerge BNS + IPC mapping chunks\nSave as Delta Table"]
+        N1_7["Step 6: Verify Tables\nSHOW TABLES IN main.india_legal\nSELECT preview from legal_rag_corpus"]
+
+        N1_0 --> N1_1 --> N1_1b --> N1_2 --> N1_3 --> N1_4 --> N1_5 --> N1_6 --> N1_7
+    end
+
+    %% ── DELTA TABLES ─────────────────────────────────────────────────────
+    subgraph DeltaLayer["🗄️ Delta Lake — main.india_legal (Unity Catalog)"]
+        T1[("bns_sections\nDelta Table")]
+        T2[("bns_ipc_mapping\nDelta Table")]
+        T3[("legal_rag_corpus\nDelta Table\nchunk_id · source · doc_type · title · text")]
+        T4[("bns_parsed_elements\nOptional Delta Table\nFrom PDF ai_parse_document path")]
+    end
+
+    %% ── NOTEBOOK 2 ───────────────────────────────────────────────────────
+    subgraph NB2["📓 NOTEBOOK 2 — build_rag_index.ipynb"]
+        direction TB
+        N2_0["Cell 1: Set REPO_ROOT\nEdit path to your workspace clone\n/Workspace/Users/you@email.com/nyaya-dhwani-hackathon"]
+        N2_1["Cell 1 (run): Install RAG Stack\nnumpy<2 · pandas<3 · faiss-cpu 1.7.x\npyarrow · sentence-transformers\npip install -e repo[rag,rag_embed]"]
+        N2_2["Cell 2: Load Corpus from Delta\nSELECT chunk_id, source, doc_type, title, text\nFROM main.india_legal.legal_rag_corpus → Pandas"]
+        N2_3["Cell 3: Embed All Chunks\nSentenceEmbedder: all-MiniLM-L6-v2\nnormalize=True → float32 embedding matrix"]
+        N2_4["Cell 4: Save RAG Artifacts to Volume\ncorpus.faiss · chunks.parquet · manifest.json\n→ /Volumes/main/india_legal/legal_files/nyaya_index/"]
+        N2_5["Cell 5: Smoke Test\nCorpusIndex.load(OUT_DIR)\nSearch: 'What is theft under BNS?' → top 5 results"]
+
+        N2_0 --> N2_1 --> N2_2 --> N2_3 --> N2_4 --> N2_5
+    end
+
+    %% ── VOLUME OUTPUT ────────────────────────────────────────────────────
+    subgraph VolumeOut["📦 Unity Catalog Volume — nyaya_index/"]
+        V1["/Volumes/main/india_legal/legal_files/nyaya_index/\n  corpus.faiss   — FAISS similarity index\n  chunks.parquet — chunk metadata\n  manifest.json  — model name + catalog info"]
+    end
+
+    %% ── DEPLOYED APP ─────────────────────────────────────────────────────
+    subgraph AppLayer["🚀 Deployed NyaaAIk (Databricks Apps)"]
+        Retriever["retriever.py\nDatabricks Vector Search + FAISS fallback"]
+        Flask["Flask API  app/main.py\n/api/chat · /api/transcribe · /api/upload"]
+        React["React Frontend\nAdvocate · Citizen · Voice · Upload"]
+    end
+
+    %% ── DATA FLOW ────────────────────────────────────────────────────────
+    CSV --> N1_3
+    HF  --> N1_5
+    PDF --> N1_4
+
+    N1_3 --> T1
+    N1_5 --> T2
+    N1_6 --> T3
+    N1_3 -.->|"PDF path only"| T4
+
+    T3 --> N2_2
+    N2_4 --> V1
+    V1  --> Retriever
+    T3  --> Retriever
+    Retriever --> Flask --> React
+
+    %% ── CLASS ASSIGNMENTS ────────────────────────────────────────────────
+    class NB1,NB2 notebook
+    class T1,T2,T3,T4 delta
+    class V1 volume
+    class Retriever,Flask,React app
+    class CSV,PDF,HF source
+```
+
+---
+
+## 🚀 Running on Databricks — Notebook-by-Notebook Guide
+
+Follow these steps **in order** inside your Databricks workspace. No local Python needed for data setup.
+
+---
+
+### Prerequisites
+
+Before running any notebook, ensure:
+
+- [ ] Databricks workspace with **Unity Catalog** enabled
+- [ ] Secret scope `nyaya-dhwani` created (see [Deployment Step 4](#step-4--set-up-databricks-secret-scope)) containing:
+  - `sarvam_api_key`
+  - `indian_kanoon_api_token`
+  - `datagov_api_key` *(optional)*
+- [ ] Repo cloned into **Workspace → Repos** (see [Step 8](#step-8--connect-repo-to-databricks-workspace))
+- [ ] A compute cluster or Serverless notebook attached
+
+---
+
+### NOTEBOOK 1 — Data Ingestion
+
+**File:** `notebooks/india_legal_policy_ingest.ipynb`
+
+Open this notebook in your Databricks workspace. Run **each cell in order**:
+
+| Cell | What It Does |
+|------|-------------|
+| **Step 0** | Installs Python packages: `requests`, `pandas`, `beautifulsoup4`, `lxml`, `openpyxl`, `pymupdf` |
+| **Step 1** | Reads secrets from `nyaya-dhwani` scope. Sets `CATALOG=main`, `SCHEMA=india_legal`, `VOLUME=legal_files` |
+| **Step 1b** *(optional)* | Pings Sarvam API with a test message to confirm the key works |
+| **Step 2** | Creates `main.india_legal` database and `legal_files` Volume in Unity Catalog |
+| **Step 3** | Loads BNS sections — tries Volume CSV first, then GitHub mirrors, then PDF fallback |
+| **Step 3a** | GitHub mirror fallback (only runs if Step 3 Volume CSV is missing) |
+| **Step 3b** | PDF + `ai_parse_document` + Sarvam enrichment (only if CSV and mirrors both fail) |
+| **Step 3c** | Downloads official law PDFs from MHA Gazette to the Unity Catalog Volume |
+| **Step 3d** | Saves `bns_sections` as a Delta table |
+| **Step 4** | Fetches BNS ↔ IPC mapping from Hugging Face. Falls back to a 7-row built-in stub |
+| **Build Corpus** | Merges all sources into `legal_rag_corpus` Delta table (`chunk_id`, `source`, `doc_type`, `title`, `text`) |
+| **Verify** | `SHOW TABLES` + preview query to confirm data is populated |
+
+**Expected output after this notebook:**
+```
+✅ Schema : main.india_legal
+✅ Volume : /Volumes/main/india_legal/legal_files
+🏛️  legal_rag_corpus: <N> total chunks
+  BNS_2023         → <N> rows
+  BNS_IPC_MAPPING  → <N> rows
+```
+
+> 💡 **Tip — Manual CSV upload**: If Step 3 fails to find a BNS CSV, download one from  
+> [Kaggle: Bharatiya Nyaya Sanhita Dataset](https://www.kaggle.com/datasets/nandr39/bharatiya-nyaya-sanhita-dataset-bns),  
+> upload via **Catalog → Volumes → legal_files → Upload to this volume**, then re-run Step 3.
+
+---
+
+### NOTEBOOK 2 — Build the RAG Index
+
+**File:** `notebooks/build_rag_index.ipynb`
+
+> ⚠️ **Run this notebook AFTER Notebook 1 completes** — it reads from `legal_rag_corpus`.
+
+Open this notebook in Databricks. Run **each cell in order**:
+
+| Cell | What It Does |
+|------|-------------|
+| **Cell 1 — Edit REPO_ROOT** | Set `REPO_ROOT` to your cloned repo path. Right-click the repo in the Workspace sidebar → **Copy path**. Example: `/Workspace/Users/you@domain.com/nyaya-dhwani-hackathon` |
+| **Cell 1 — Run** | Installs RAG stack: `numpy<2`, `faiss-cpu<1.8`, `sentence-transformers`, `pyarrow`, `pandas`. Then runs `pip install -e <REPO_ROOT>[rag,rag_embed]` to make `import nyaya_dhwani` work |
+| **Cell 2** | Loads corpus from Delta: `main.india_legal.legal_rag_corpus` → Pandas DataFrame |
+| **Cell 3** | Embeds all text chunks using `sentence-transformers/all-MiniLM-L6-v2` with L2 normalization |
+| **Cell 4** | Saves three RAG artifacts to the Unity Catalog Volume |
+| **Cell 5** | Smoke test: loads the index and runs `"What is theft under BNS?"` → prints top-5 results |
+
+**Expected output:**
+```
+✅ pip: numpy 1.x, pandas<3, faiss-cpu 1.7.x, pyarrow, sentence-transformers
+✅ import nyaya_dhwani → /Workspace/Users/.../src/nyaya_dhwani
+✅ import faiss OK
+(<N_chunks>, 384)   ← embedding dimensions
+✅ Artifacts saved to /Volumes/main/india_legal/legal_files/nyaya_index/
+```
+
+**Output artifacts saved to:**
+```
+/Volumes/main/india_legal/legal_files/nyaya_index/
+├── corpus.faiss      ← FAISS similarity index
+├── chunks.parquet    ← chunk metadata (id, source, title, text)
+└── manifest.json     ← embedding model name, catalog, schema, timestamp
+```
+
+> 💡 **If `import nyaya_dhwani` fails**: Ensure `REPO_ROOT` exactly matches the path shown in the Workspace sidebar. Do **not** add `%restart_python` in the install cell — it breaks the kernel before later cells run.
+
+---
+
+### After Both Notebooks Complete
+
+The `retriever.py` module in the deployed app automatically loads the FAISS index from the Volume path. No additional steps are needed — just deploy the app as described in Steps 9–10 below.
 
 ---
 
@@ -105,6 +302,10 @@ nyaya-dhwani-hackathon/
 │   └── static/              ← Built React app (DO NOT edit manually)
 │       ├── index.html
 │       └── assets/
+│
+├── notebooks/
+│   ├── india_legal_policy_ingest.ipynb  ← NOTEBOOK 1: Data ingestion → Delta tables
+│   └── build_rag_index.ipynb            ← NOTEBOOK 2: Build FAISS index → Volume
 │
 ├── frontend/
 │   ├── src/
@@ -132,11 +333,11 @@ nyaya-dhwani-hackathon/
 │   └── nyaya_dhwani/
 │       ├── sarvam_client.py  ← Sarvam API helpers (STT, TTS, translate)
 │       ├── llm_client.py     ← Maverick LLM calls
-│       ├── retriever.py      ← Databricks Vector Search retriever
+│       ├── retriever.py      ← Databricks Vector Search + FAISS fallback
 │       └── case_search.py    ← Indian Kanoon API integration
 │
 ├── app.yaml                  ← Databricks App config
-├── setup_secrets.py          ← Notebook to create secret scope
+├── setup_secrets.py          ← Script to create secret scope
 └── README.md
 ```
 
@@ -204,15 +405,60 @@ env:
 
 ### STEP 4 — Set Up Databricks Secret Scope
 
-This stores API keys securely. Instead of writing code, you can use the pre-built notebook:
+This stores API keys securely. Run the following in a **Databricks notebook** (not locally):
 
-1. In your Databricks Workspace, click **Workspace → Import**.
-2. Select the **`setup_secrets.py`** file from this repository.
-3. Databricks will automatically open it as a rich, interactive Notebook.
-4. Open the notebook, paste your **Indian Kanoon** and **Sarvam** API keys into the designated cells.
-5. Click **Run All** to securely save your secrets to the Databricks Vault.
+**Cell 1 — Get workspace context**
+```python
+import requests
 
-> ✅ Values always show as `[REDACTED]` in Databricks logs — that is correct behaviour.
+ctx   = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
+HOST  = ctx.apiUrl().get()
+TOKEN = ctx.apiToken().get()
+HEADERS = {"Authorization": f"Bearer {TOKEN}"}
+print("Host:", HOST)
+```
+
+**Cell 2 — Create the secret scope**
+```python
+r = requests.post(f"{HOST}/api/2.0/secrets/scopes/create",
+    headers=HEADERS,
+    json={"scope": "nyaya-dhwani", "initial_manage_principal": "users"})
+print(r.status_code, r.text)
+# 200 = created   |   RESOURCE_ALREADY_EXISTS = already exists (both OK)
+```
+
+**Cell 3 — Store Indian Kanoon API token**
+```python
+r = requests.post(f"{HOST}/api/2.0/secrets/put",
+    headers=HEADERS,
+    json={
+        "scope": "nyaya-dhwani",
+        "key":   "indian_kanoon_api_token",
+        "string_value": "YOUR_INDIAN_KANOON_TOKEN_HERE"
+    })
+print(r.status_code, r.text)
+```
+
+**Cell 4 — Store Sarvam API key**
+```python
+r = requests.post(f"{HOST}/api/2.0/secrets/put",
+    headers=HEADERS,
+    json={
+        "scope": "nyaya-dhwani",
+        "key":   "sarvam_api_key",
+        "string_value": "YOUR_SARVAM_API_KEY_HERE"
+    })
+print(r.status_code, r.text)
+```
+
+**Cell 5 — Verify**
+```python
+r = requests.get(f"{HOST}/api/2.0/secrets/list?scope=nyaya-dhwani", headers=HEADERS)
+print(r.json())
+# Expected: {'secrets': [{'key': 'indian_kanoon_api_token', ...}, {'key': 'sarvam_api_key', ...}]}
+```
+
+> ✅ Values always show as `[REDACTED]` in Databricks — that is correct behaviour.
 
 ---
 
@@ -233,6 +479,25 @@ In the Databricks Apps UI, before deploying, add both secrets as **resources** s
    - Resource key: `secret2`
 
 > ⚠️ Without these resource declarations, the app cannot read the secrets even if they exist in the scope.
+
+---
+
+### STEP 5b — Run Notebook 1: Data Ingestion (inside Databricks)
+
+1. Navigate to **Workspace → Repos → NyaaAIk → notebooks**
+2. Open `india_legal_policy_ingest.ipynb`
+3. Attach to a cluster (Standard or Serverless)
+4. Run **all cells in order** — see the [Notebook 1 guide above](#notebook-1--data-ingestion)
+
+---
+
+### STEP 5c — Run Notebook 2: Build RAG Index (inside Databricks)
+
+> Run this **after Notebook 1 completes** successfully.
+
+1. Navigate to **notebooks → build_rag_index.ipynb**
+2. **Edit `REPO_ROOT`** in Cell 1 to match your workspace path
+3. Run **all cells in order** — see the [Notebook 2 guide above](#notebook-2--build-the-rag-index)
 
 ---
 
@@ -335,6 +600,7 @@ git push origin main
 | Commit after editing source but before building | Always build before committing |
 | Use Windows line endings (CRLF) for Python/YAML | Keep `.gitattributes` — it enforces LF |
 | Skip the resource declarations (Step 5) | Always add both secrets as App Resources |
+| Run Notebook 2 before Notebook 1 finishes | Wait for `legal_rag_corpus` table to be created first |
 
 ---
 
@@ -389,6 +655,11 @@ git push origin main
 | `CRLF` / YAML parse error | Windows line endings in git | `.gitattributes` handles this; don't override |
 | Voice mic button missing | Browser doesn't support MediaRecorder | Use Chrome or Edge |
 | PDF upload fails | File > 20 MB | Compress or split the PDF |
+| `Cannot import nyaya_dhwani` | Wrong `REPO_ROOT` in Notebook 2 | Copy path from Workspace sidebar, set exactly |
+| `legal_rag_corpus` table missing | Notebook 1 not run yet | Run `india_legal_policy_ingest.ipynb` first |
+| FAISS index not found | Notebook 2 not run yet | Run `build_rag_index.ipynb` after Notebook 1 |
+| No BNS data — CSV missing | Volume CSV not uploaded | Download from Kaggle, upload to Volume, re-run Step 3 |
+| Sarvam 403 in Notebook | Key invalid or no billing | Check [dashboard.sarvam.ai](https://dashboard.sarvam.ai/) |
 
 ---
 
