@@ -401,6 +401,22 @@ def _rag_answer_with_cases(
 app = Flask(__name__, static_folder=str(_ROOT / "app" / "static"))
 
 
+# Always return JSON for errors on /api/* routes (never HTML)
+@app.errorhandler(400)
+@app.errorhandler(404)
+@app.errorhandler(405)
+@app.errorhandler(500)
+def json_error(e):
+    from flask import request as _req
+    if _req.path.startswith("/api/"):
+        return jsonify({"error": str(e)}), e.code if hasattr(e, "code") else 500
+    # For non-API routes return the SPA
+    try:
+        return send_from_directory(str(Path(__file__).parent / "static"), "index.html")
+    except Exception:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/")
 def index():
     return send_from_directory(str(Path(__file__).parent / "static"), "index.html")
