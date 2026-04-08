@@ -34,6 +34,60 @@ NyaaAIk is an AI legal assistant for Indian users that:
 
 ---
 
+## 🏛️ System Architecture & Data Flow
+
+```mermaid
+flowchart TD
+    %% Base Inputs
+    U[User Query] --> Refiner[LLM Query Refiner\n(Llama 4 Maverick)]
+    
+    %% Ingestion & Vector Search Pipeline
+    subgraph DataPlatform[Databricks Data Intelligence Platform]
+        direction TB
+        BNS[(Chunk Set 1: Delta Tables\nBNS, BNSS, BSA)]
+        FallBk[(Chunk Set 2: Delta Tables\n2000 Case Fallback)]
+        
+        Genie([Databricks Genie\nAuto-Chunking]) --> BNS
+        Genie --> FallBk
+        
+        BNS --> VS1[(Databricks Vector Search\nIndex 1)]
+        FallBk --> VS2[(Databricks Vector Search\nIndex 2)]
+    end
+    
+    %% Live Searching
+    subgraph WebScraping[Live Web Scraping]
+        Kanoon([Indian Kanoon API])
+    end
+
+    %% Retrieval Layer
+    Refiner -- Semantic Query --> VS1 & VS2
+    Refiner -- Refined Keywords --> Kanoon
+
+    VS1 -- "Highly Relevant Statutes" --> Synth
+    VS2 -- "Semantic Fallback Cases" --> Synth
+    Kanoon -- "Top 5-10 Live Cases" --> Synth
+
+    %% Synthesis Layer
+    subgraph LLM[LLM Synthesis Engine]
+        direction TB
+        Persona[UI Prompts/Modifiers\nAdvocate vs Citizen] --> Synth[Meta Llama 4 Maverick\nOpen Source LLM]
+        U -- Original Context --> Synth
+    end
+
+    %% Output
+    Synth --> Out[Generation:\nStructured Legal Response\n+ Properly Cited Cases]
+    
+    classDef db fill:#ff3621,stroke:#333,stroke-width:1px,color:#fff;
+    classDef os fill:#1a73e8,stroke:#333,stroke-width:1px,color:#fff;
+    
+    class Gen,VS1,VS2,Refiner db;
+    class Synth os;
+```
+
+*Note: Highlighted components leverage the open-source Meta Llama 4 Maverick model and extensive Databricks enterprise infrastructure.*
+
+---
+
 ## Repository Structure
 
 ```
