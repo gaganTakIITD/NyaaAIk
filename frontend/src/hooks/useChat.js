@@ -53,6 +53,7 @@ export function useChat() {
   const [error, setError] = useState(null)
   const [court, setCourt] = useState('all')
   const [style, setStyle] = useState('neutral')
+  const [persona, setPersona] = useState('advocate')
 
   // Persist to localStorage whenever conversations change
   useEffect(() => {
@@ -142,6 +143,7 @@ export function useChat() {
         query: query.trim(),
         court,
         style,
+        persona,
         history,
         docIds,
       })
@@ -185,5 +187,6 @@ export function useChat() {
     clearError,
     court, setCourt,
     style, setStyle,
+    persona, setPersona,
   }
 }

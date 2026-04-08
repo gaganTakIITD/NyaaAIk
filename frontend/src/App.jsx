@@ -10,11 +10,15 @@ import { useDocuments } from './hooks/useDocuments.js'
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  // Lifted input text — allows topic chips and suggestion cards to pre-fill without sending
+  const [inputText, setInputText] = useState('')
+
   const {
     conversations, activeConversation, activeId,
     selectConversation, startNewChat, deleteConversation,
     sendMessage, isLoading, error, clearError,
     court, setCourt, style, setStyle,
+    persona, setPersona,
   } = useChat()
 
   const {
@@ -22,8 +26,14 @@ export default function App() {
     uploadFile, removeDocument, toggleDocActive,
   } = useDocuments()
 
+  // Pre-fill input (from topic chips / suggestion cards) without sending
+  const handlePrefill = useCallback((text) => {
+    setInputText(text)
+  }, [])
+
   const handleSend = useCallback((text) => {
     sendMessage(text, activeDocIds)
+    setInputText('')
   }, [sendMessage, activeDocIds])
 
   // Auto-close sidebar on mobile
@@ -57,18 +67,24 @@ export default function App() {
           onToggleSidebar={() => setSidebarOpen(v => !v)}
           sidebarOpen={sidebarOpen}
         />
-        <ControlsBar court={court} setCourt={setCourt} style={style} setStyle={setStyle} />
-        <TopicsChips onSelect={handleSend} disabled={isLoading} />
+        <ControlsBar
+          court={court} setCourt={setCourt}
+          style={style} setStyle={setStyle}
+          persona={persona} setPersona={setPersona}
+        />
+        <TopicsChips onPrefill={handlePrefill} disabled={isLoading} />
         <ChatWindow
           messages={activeConversation?.messages || []}
           isLoading={isLoading}
           error={error}
           onClearError={clearError}
-          onSuggestionSelect={handleSend}
+          onSuggestionSelect={handlePrefill}
         />
         <InputBar
           onSend={handleSend}
           disabled={isLoading}
+          value={inputText}
+          onChange={setInputText}
           documents={documents}
           activeDocIds={activeDocIds}
           onUpload={uploadFile}

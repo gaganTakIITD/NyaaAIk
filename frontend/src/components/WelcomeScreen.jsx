@@ -1,10 +1,9 @@
 import { IconGavel } from '../utils/icons.jsx'
 
-// Gemini-style: clean greeting + suggestion cards in a 2-column grid
 const SUGGESTIONS = [
   {
     title: 'BNS provisions on theft',
-    query: 'What are the legal provisions for theft under Bharatiya Nyaya Sanhita 2023?',
+    query: 'What are the legal provisions for theft under Bharatiya Nyaya Sanhita 2023 and relevant cases?',
   },
   {
     title: 'Bail in non-bailable offences',
@@ -20,7 +19,8 @@ const SUGGESTIONS = [
   },
 ]
 
-export default function WelcomeScreen({ onSelect }) {
+// Suggestion cards pre-fill the input so user can edit before sending
+export default function WelcomeScreen({ onPrefill }) {
   return (
     <div className="welcome-screen">
       <div className="welcome-greeting">
@@ -29,14 +29,18 @@ export default function WelcomeScreen({ onSelect }) {
       <p className="welcome-sub">
         Ask any legal question. I'll search BNS provisions, find court precedents from Indian Kanoon, and generate a structured legal analysis using Llama 4 Maverick.
       </p>
+      <p style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginBottom: 16, marginTop: -16 }}>
+        Click a suggestion to pre-fill — edit before sending. Paste a screenshot directly with Ctrl+V.
+      </p>
       <div className="suggestion-grid">
         {SUGGESTIONS.map((s, i) => (
           <div
             key={i}
             className="suggestion-card"
-            onClick={() => onSelect && onSelect(s.query)}
+            onClick={() => onPrefill && onPrefill(s.query)}
             role="button" tabIndex={0}
-            onKeyDown={e => e.key === 'Enter' && onSelect && onSelect(s.query)}
+            aria-label={`Pre-fill: ${s.title}`}
+            onKeyDown={e => e.key === 'Enter' && onPrefill && onPrefill(s.query)}
           >
             <div className="suggestion-card-title">
               <IconGavel size={14} />
