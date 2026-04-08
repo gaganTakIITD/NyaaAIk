@@ -101,6 +101,10 @@ export function useChat() {
     })
   }, [conversations])
 
+  // Keep a ref so sendMessage always has the latest persona without stale closure issues
+  const personaRef = useRef(persona)
+  useEffect(() => { personaRef.current = persona }, [persona])
+
   const sendMessage = useCallback(async (query, docIds = []) => {
     if (!query.trim() || isLoading) return
 
@@ -111,7 +115,6 @@ export function useChat() {
       timestamp: Date.now(),
     }
 
-    // Add user message and update conversation title on first message
     setConversations(prev => prev.map(c => {
       if (c.id !== activeId) return c
       const isFirst = c.messages.length === 0
@@ -128,22 +131,16 @@ export function useChat() {
     const startTime = Date.now()
 
     try {
-      // Build history from current conversation (excluding the msg we just added)
       const currentConv = conversations.find(c => c.id === activeId)
       const existingMessages = currentConv?.messages || []
-
-      // Trim to max history (send last N messages)
       const historySlice = existingMessages.slice(-MAX_HISTORY)
-      const history = historySlice.map(m => ({
-        role: m.role,
-        content: m.content,
-      }))
+      const history = historySlice.map(m => ({ role: m.role, content: m.content }))
 
       const result = await apiChat({
         query: query.trim(),
         court,
         style,
-        persona,
+        persona: personaRef.current,   // always fresh — never stale
         history,
         docIds,
       })
@@ -170,7 +167,8 @@ export function useChat() {
     } finally {
       setIsLoading(false)
     }
-  }, [activeId, isLoading, court, style, persona, conversations])
+  }, [activeId, isLoading, court, style, conversations])
+
 
   const clearError = useCallback(() => setError(null), [])
 
