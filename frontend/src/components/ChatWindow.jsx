@@ -3,7 +3,7 @@ import MessageBubble from './MessageBubble.jsx'
 import ThinkingIndicator from './ThinkingIndicator.jsx'
 import WelcomeScreen from './WelcomeScreen.jsx'
 
-export default function ChatWindow({ messages, isLoading, error, onClearError, onSuggestionSelect }) {
+export default function ChatWindow({ messages, isLoading, error, onClearError, onSuggestionSelect, persona }) {
   const bottomRef = useRef(null)
 
   useEffect(() => {
@@ -15,7 +15,7 @@ export default function ChatWindow({ messages, isLoading, error, onClearError, o
   return (
     <main className="chat-window" id="chatWindow" aria-label="Conversation" aria-live="polite">
       {isEmpty && !isLoading ? (
-        <WelcomeScreen onPrefill={onSuggestionSelect} />
+        <WelcomeScreen onPrefill={onSuggestionSelect} persona={persona} />
       ) : (
         <>
           {messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}

@@ -97,6 +97,7 @@ export default function App() {
           error={error}
           onClearError={clearError}
           onSuggestionSelect={handlePrefill}
+          persona={persona}
         />
         <InputBar
           onSend={handleSend}
