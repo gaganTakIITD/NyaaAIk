@@ -280,7 +280,75 @@ SHOW CATALOGS;
 
 ---
 
+### STEP 0 — Upload BNS / BNSS / BSA Data & Convert to Delta Tables using Genie
+
+> **Do this before running Notebook 1.** The notebooks need the raw legal text data to exist somewhere accessible. You have two paths:
+
+---
+
+#### Path A — Upload CSV to the Volume (Fastest)
+
+1. Download the BNS sections CSV from Kaggle:  
+   👉 [kaggle.com/datasets/nandr39/bharatiya-nyaya-sanhita-dataset-bns](https://www.kaggle.com/datasets/nandr39/bharatiya-nyaya-sanhita-dataset-bns)
+
+2. In your Databricks workspace, go to:  
+   **Catalog → main → india_legal → Volumes → legal_files → Upload to this volume**
+
+3. Upload `bns_sections.csv` (rename it exactly to `bns_sections.csv` if needed)
+
+4. Notebook 1 → Step 3 will automatically find it at `/Volumes/main/india_legal/legal_files/bns_sections.csv`
+
+---
+
+#### Path B — Use Databricks Genie to Convert Raw Files to Delta Tables (Recommended for full corpus)
+
+Databricks **Genie** can read raw PDFs, CSVs, and text directly from your Volume and convert them into structured Delta tables automatically.
+
+**Step-by-step:**
+
+1. **Upload raw law files to the Volume:**
+   - Go to **Catalog → main → india_legal → Volumes → legal_files → Upload**
+   - Upload any of the following you have:
+     - `bns_sections.csv` — BNS section text (structured)
+     - `bns_2023.pdf` — Official BNS Gazette PDF (MHA)
+     - `bnss_2023.pdf` — BNSS Gazette PDF
+     - `bsa_2023.pdf` — BSA Gazette PDF
+     - `constitution_of_india.pdf` — Constitution PDF
+
+2. **Open Databricks Genie:**
+   - Go to **New → Genie Space** in the left sidebar
+   - Or navigate to **Genie** from the sidebar
+
+3. **Tell Genie what to do** — example prompts you can use:
+
+   ```
+   I have uploaded bns_sections.csv to /Volumes/main/india_legal/legal_files/.
+   Please read it and save it as a Delta table called main.india_legal.bns_sections
+   with columns: section_number, section_title, section_text, source
+   ```
+
+   ```
+   Read the PDF at /Volumes/main/india_legal/legal_files/bns_2023.pdf,
+   extract all sections with their numbers and text,
+   and save as Delta table main.india_legal.bns_sections
+   ```
+
+4. **Verify Genie created the table:**
+   ```sql
+   SELECT COUNT(*) FROM main.india_legal.bns_sections;
+   SELECT * FROM main.india_legal.bns_sections LIMIT 5;
+   ```
+
+5. Once the table exists, **Notebook 1 Step 5 (Build Corpus)** will pick it up automatically when building `legal_rag_corpus`
+
+> 💡 **Tip:** Genie works best with structured CSVs. For PDFs, the notebook's `ai_parse_document` fallback in Step 3b does the same thing automatically — so if Genie struggles with a PDF, just upload the file to the volume and let Notebook 1 handle it.
+
+> 💡 **Tip:** If you don't have any files yet — Notebook 1 Step 3 will automatically download the official PDFs from the MHA Gazette and extract sections for you. You don't need to upload anything manually in that case.
+
+---
+
 ### NOTEBOOK 1 — Data Ingestion
+
 
 **File:** `notebooks/india_legal_policy_ingest.ipynb`
 
