@@ -823,3 +823,80 @@ body {
   .msg-row.user .msg-body { max-width: 90%; }
   .input-hint { display: none; }
 }
+
+/* ==================== VOICE UI ==================== */
+
+/* Mic button */
+.mic-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-tertiary);
+  position: relative;
+}
+.mic-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+  color: var(--text-secondary);
+}
+.mic-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Recording state */
+.mic-btn.recording {
+  background: var(--error-dim);
+  border-color: rgba(242,139,130,0.5);
+  color: var(--error);
+  animation: micPulse 1.5s ease-in-out infinite;
+}
+@keyframes micPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(242,139,130,0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(242,139,130,0); }
+}
+
+/* Input wrap recording ring */
+.input-wrap.recording {
+  border-color: var(--error);
+  box-shadow: 0 0 0 2px rgba(242,139,130,0.12),
+              0 0 16px rgba(242,139,130,0.08);
+}
+
+/* Voice recording banner */
+.voice-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; margin-bottom: 8px;
+  background: var(--error-dim);
+  border: 1px solid rgba(242,139,130,0.25);
+  border-radius: var(--radius-full);
+  font-size: 0.75rem; color: var(--error);
+  animation: fadeIn 0.2s var(--ease);
+}
+.voice-banner-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--error); flex-shrink: 0;
+  animation: dotBlink 1s ease-in-out infinite;
+}
+@keyframes dotBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+.voice-interim {
+  color: rgba(242,139,130,0.7);
+  font-style: italic;
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.voice-banner-stop {
+  background: transparent; border: 1px solid rgba(242,139,130,0.4);
+  border-radius: var(--radius-full); padding: 2px 10px;
+  font-size: 0.69rem; font-weight: 600;
+  font-family: inherit; color: var(--error);
+  cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+  margin-left: auto;
+}
+.voice-banner-stop:hover {
+  background: rgba(242,139,130,0.15);
+  border-color: var(--error);
+}
+
