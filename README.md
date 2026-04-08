@@ -45,19 +45,19 @@ NyaaAIk is an AI legal assistant for Indian users that:
 ```mermaid
 flowchart TD
     %% Base Inputs
-    U[User Query] --> Refiner[LLM Query Refiner\n(Llama 4 Maverick)]
+    U[User Query] --> Refiner[LLM Query Refiner<br/>Llama 4 Maverick]
 
     %% Ingestion & Vector Search Pipeline
     subgraph DataPlatform[Databricks Data Intelligence Platform]
         direction TB
-        BNS[(Chunk Set 1: Delta Tables\nBNS, BNSS, BSA)]
-        FallBk[/"(Planned) Chunk Set 2:\n2000 Case Fallback"/]
+        BNS[(Delta Tables<br/>BNS / BNSS / BSA)]
+        FallBk[/"Planned: Chunk Set 2<br/>2000 Case Fallback"/]
 
-        Genie([Databricks Genie\nAuto-Chunking]) --> BNS
+        Genie([Databricks Genie<br/>Auto-Chunking]) --> BNS
         Genie -.-> FallBk
 
-        BNS --> VS1[(Databricks Vector Search\nIndex 1)]
-        FallBk -.-> VS2[/"(Planned) Vector Search\nIndex 2"/]
+        BNS --> VS1[(Databricks Vector Search<br/>Index 1)]
+        FallBk -.-> VS2[/"Planned: Vector Search<br/>Index 2"/]
     end
 
     %% Live Searching
@@ -69,25 +69,25 @@ flowchart TD
     Refiner -- Semantic Query --> VS1 & VS2
     Refiner -- Refined Keywords --> Kanoon
 
-    VS1 -- "Highly Relevant Statutes" --> Synth
-    VS2 -.->|"Data Unavailable"| Synth
-    Kanoon -- "Top 5-10 Live Cases" --> Synth
+    VS1 -- Highly Relevant Statutes --> Synth
+    VS2 -.->|Data Unavailable| Synth
+    Kanoon -- Top 5-10 Live Cases --> Synth
 
     %% Synthesis Layer
     subgraph LLM[LLM Synthesis Engine]
         direction TB
-        Persona[UI Prompts/Modifiers\nAdvocate vs Citizen] --> Synth[Meta Llama 4 Maverick\nOpen Source LLM]
+        Persona["UI Prompts/Modifiers<br/>Advocate vs Citizen"] --> Synth["Meta Llama 4 Maverick<br/>Open Source LLM"]
         U -- Original Context --> Synth
     end
 
     %% Output
-    Synth --> Out[Generation:\nStructured Legal Response\n+ Properly Cited Cases]
+    Synth --> Out["Structured Legal Response<br/>+ Properly Cited Cases"]
 
     classDef db fill:#ff3621,stroke:#333,stroke-width:1px,color:#fff;
     classDef os fill:#1a73e8,stroke:#333,stroke-width:1px,color:#fff;
     classDef planned fill:#f0f0f0,stroke:#666,stroke-width:2px,stroke-dasharray: 5 5,color:#666;
 
-    class Gen,VS1,Refiner db;
+    class VS1,Refiner db;
     class Synth os;
     class FallBk,VS2 planned;
 ```
@@ -111,59 +111,59 @@ flowchart TD
     classDef source fill:#444,stroke:#999,stroke-width:1px,color:#fff
 
     %% ── RAW DATA SOURCES ─────────────────────────────────────────────────
-    subgraph Sources["📥 Raw Data Sources"]
-        CSV["BNS Sections CSV\n(Volume upload or GitHub mirror)"]
-        PDF["Official Law PDFs\nBNS · BNSS · BSA · Constitution\n(MHA Gazette / Indiacode.nic.in)"]
-        HF["Hugging Face Dataset\nIPC ↔ BNS Mapping\n(nandhakumarg/IPC_and_BNS_transformation)"]
+    subgraph Sources["Raw Data Sources"]
+        CSV["BNS Sections CSV<br/>Volume upload or GitHub mirror"]
+        PDF["Official Law PDFs<br/>BNS / BNSS / BSA / Constitution<br/>MHA Gazette / Indiacode.nic.in"]
+        HF["Hugging Face Dataset<br/>IPC to BNS Mapping"]
     end
 
     %% ── NOTEBOOK 1 ───────────────────────────────────────────────────────
-    subgraph NB1["📓 NOTEBOOK 1 — india_legal_policy_ingest.ipynb"]
+    subgraph NB1["NOTEBOOK 1 — india_legal_policy_ingest.ipynb"]
         direction TB
-        N1_0["Step 0: Install Dependencies\npip install requests pandas bs4 pymupdf openpyxl"]
-        N1_1["Step 1: Config & Helpers\nRead secrets from nyaya-dhwani scope\nCATALOG=main · SCHEMA=india_legal · VOLUME=legal_files"]
-        N1_1b["Step 1b: Sarvam Connectivity Test\nOptional ping to sarvam.ai API"]
-        N1_2["Step 2: Unity Catalog Setup\nCREATE DATABASE IF NOT EXISTS main.india_legal\nCREATE VOLUME  IF NOT EXISTS legal_files\nMkdir /Volumes/main/india_legal/legal_files/pdfs"]
-        N1_3["Step 3: Load BNS Sections\n① Try Volume CSV paths\n② Fallback: GitHub mirrors\n③ Fallback: PDF + ai_parse_document + Sarvam"]
-        N1_4["Step 3c: Download Official Law PDFs\nBNS · BNSS · BSA · Constitution\nSaved to Unity Catalog Volume"]
-        N1_5["Step 4: BNS ↔ IPC Mapping Table\nFetch from Hugging Face\nFallback: 7-row built-in stub"]
-        N1_6["Step 5: Build legal_rag_corpus\nMerge BNS + IPC mapping chunks\nSave as Delta Table"]
-        N1_7["Step 6: Verify Tables\nSHOW TABLES IN main.india_legal\nSELECT preview from legal_rag_corpus"]
+        N1_0["Step 0: Install Dependencies<br/>requests pandas bs4 pymupdf openpyxl"]
+        N1_1["Step 1: Config and Helpers<br/>Read secrets from nyaya-dhwani scope<br/>CATALOG=main / SCHEMA=india_legal"]
+        N1_1b["Step 1b: Sarvam Connectivity Test<br/>Optional ping to sarvam.ai"]
+        N1_2["Step 2: Unity Catalog Setup<br/>CREATE DATABASE main.india_legal<br/>CREATE VOLUME legal_files"]
+        N1_3["Step 3: Load BNS Sections<br/>1 Try Volume CSV / 2 GitHub mirrors<br/>3 PDF + ai_parse_document fallback"]
+        N1_4["Step 3c: Download Official Law PDFs<br/>BNS / BNSS / BSA / Constitution<br/>Saved to Unity Catalog Volume"]
+        N1_5["Step 4: BNS to IPC Mapping Table<br/>Fetch from Hugging Face<br/>Fallback: 7-row built-in stub"]
+        N1_6["Step 5: Build legal_rag_corpus<br/>Merge BNS + IPC mapping chunks<br/>Save as Delta Table"]
+        N1_7["Step 6: Verify Tables<br/>SHOW TABLES IN main.india_legal<br/>SELECT preview from legal_rag_corpus"]
 
         N1_0 --> N1_1 --> N1_1b --> N1_2 --> N1_3 --> N1_4 --> N1_5 --> N1_6 --> N1_7
     end
 
     %% ── DELTA TABLES ─────────────────────────────────────────────────────
-    subgraph DeltaLayer["🗄️ Delta Lake — main.india_legal (Unity Catalog)"]
-        T1[("bns_sections\nDelta Table")]
-        T2[("bns_ipc_mapping\nDelta Table")]
-        T3[("legal_rag_corpus\nDelta Table\nchunk_id · source · doc_type · title · text")]
-        T4[("bns_parsed_elements\nOptional Delta Table\nFrom PDF ai_parse_document path")]
+    subgraph DeltaLayer["Delta Lake — main.india_legal"]
+        T1["bns_sections<br/>Delta Table"]
+        T2["bns_ipc_mapping<br/>Delta Table"]
+        T3["legal_rag_corpus<br/>chunk_id / source / doc_type / title / text"]
+        T4["bns_parsed_elements<br/>Optional — PDF ai_parse_document path"]
     end
 
     %% ── NOTEBOOK 2 ───────────────────────────────────────────────────────
-    subgraph NB2["📓 NOTEBOOK 2 — build_rag_index.ipynb"]
+    subgraph NB2["NOTEBOOK 2 — build_rag_index.ipynb"]
         direction TB
-        N2_0["Cell 1: Set REPO_ROOT\nEdit path to your workspace clone\n/Workspace/Users/you@email.com/nyaya-dhwani-hackathon"]
-        N2_1["Cell 1 (run): Install RAG Stack\nnumpy<2 · pandas<3 · faiss-cpu 1.7.x\npyarrow · sentence-transformers\npip install -e repo[rag,rag_embed]"]
-        N2_2["Cell 2: Load Corpus from Delta\nSELECT chunk_id, source, doc_type, title, text\nFROM main.india_legal.legal_rag_corpus → Pandas"]
-        N2_3["Cell 3: Embed All Chunks\nSentenceEmbedder: all-MiniLM-L6-v2\nnormalize=True → float32 embedding matrix"]
-        N2_4["Cell 4: Save RAG Artifacts to Volume\ncorpus.faiss · chunks.parquet · manifest.json\n→ /Volumes/main/india_legal/legal_files/nyaya_index/"]
-        N2_5["Cell 5: Smoke Test\nCorpusIndex.load(OUT_DIR)\nSearch: 'What is theft under BNS?' → top 5 results"]
+        N2_0["Cell 1: Set REPO_ROOT<br/>Edit path to your workspace clone"]
+        N2_1["Cell 1 run: Install RAG Stack<br/>numpy / faiss-cpu 1.7.x / sentence-transformers<br/>pip install -e repo rag rag_embed"]
+        N2_2["Cell 2: Load Corpus from Delta<br/>SELECT from legal_rag_corpus to Pandas"]
+        N2_3["Cell 3: Embed All Chunks<br/>all-MiniLM-L6-v2 / normalize / float32"]
+        N2_4["Cell 4: Save RAG Artifacts<br/>corpus.faiss / chunks.parquet / manifest.json<br/>to nyaya_index Volume"]
+        N2_5["Cell 5: Smoke Test<br/>Load index / search theft under BNS / top 5"]
 
         N2_0 --> N2_1 --> N2_2 --> N2_3 --> N2_4 --> N2_5
     end
 
     %% ── VOLUME OUTPUT ────────────────────────────────────────────────────
-    subgraph VolumeOut["📦 Unity Catalog Volume — nyaya_index/"]
-        V1["/Volumes/main/india_legal/legal_files/nyaya_index/\n  corpus.faiss   — FAISS similarity index\n  chunks.parquet — chunk metadata\n  manifest.json  — model name + catalog info"]
+    subgraph VolumeOut["Unity Catalog Volume — nyaya_index"]
+        V1["nyaya_index/<br/>corpus.faiss — FAISS index<br/>chunks.parquet — metadata<br/>manifest.json — model info"]
     end
 
     %% ── DEPLOYED APP ─────────────────────────────────────────────────────
-    subgraph AppLayer["🚀 Deployed NyaaAIk (Databricks Apps)"]
-        Retriever["retriever.py\nDatabricks Vector Search + FAISS fallback"]
-        Flask["Flask API  app/main.py\n/api/chat · /api/transcribe · /api/upload"]
-        React["React Frontend\nAdvocate · Citizen · Voice · Upload"]
+    subgraph AppLayer["Deployed NyaaAIk — Databricks Apps"]
+        Retriever["retriever.py<br/>Vector Search + FAISS fallback"]
+        Flask["Flask API app/main.py<br/>/api/chat / /api/transcribe / /api/upload"]
+        React["React Frontend<br/>Advocate / Citizen / Voice / Upload"]
     end
 
     %% ── DATA FLOW ────────────────────────────────────────────────────────
@@ -174,7 +174,7 @@ flowchart TD
     N1_3 --> T1
     N1_5 --> T2
     N1_6 --> T3
-    N1_3 -.->|"PDF path only"| T4
+    N1_3 -.->|PDF path only| T4
 
     T3 --> N2_2
     N2_4 --> V1
