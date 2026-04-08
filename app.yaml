@@ -1,21 +1,15 @@
-# Databricks Apps runtime — Flask backend
 command: ["python", "app/main.py"]
 
 env:
-  # LLM via Databricks AI Gateway (Llama 4 Maverick)
-  - name: "LLM_OPENAI_BASE_URL"
+  - name: LLM_OPENAI_BASE_URL
     value: "https://7474644976620372.ai-gateway.cloud.databricks.com/mlflow/v1"
-  - name: "LLM_MODEL"
+  - name: LLM_MODEL
     value: "databricks-llama-4-maverick"
-
-  # Vector Search (primary backend — BNS/Constitution)
-  - name: "NYAYA_RETRIEVAL_BACKEND"
+  - name: NYAYA_RETRIEVAL_BACKEND
     value: "vector_search"
-  - name: "NYAYA_VS_ENDPOINT_NAME"
+  - name: NYAYA_VS_ENDPOINT_NAME
     value: "nyaya_vs_endpoint"
-  - name: "NYAYA_VS_INDEX_NAME"
+  - name: NYAYA_VS_INDEX_NAME
     value: "main.india_legal.legal_rag_corpus_index"
-
-  # Indian Kanoon API (live case search)
-  - name: "INDIAN_KANOON_API_TOKEN"
+  - name: INDIAN_KANOON_API_TOKEN
     value: "56c4b332055afa06411225184ba1fdf9675d947f"
