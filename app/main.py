@@ -1,11 +1,13 @@
-"""Flask entrypoint: NyaaAIk Legal Research — RAG + Maverick + Live Cases."""
+"""Flask entrypoint: NyaaAIk Legal Research — RAG + Maverick + Live Cases + Document Upload."""
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import os
 import sys
+import uuid
 from pathlib import Path
 
 # Repo root on Databricks Repos / local clone
@@ -25,6 +27,13 @@ from nyaya_dhwani.case_search import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# In-memory document store (keyed by doc_id UUID)
+# Each entry: { "filename": str, "text": str, "page_count": int | None }
+# This is per-process state — fine for Databricks Apps (single worker)
+# ---------------------------------------------------------------------------
+_DOC_STORE: dict[str, dict] = {}
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -63,6 +72,73 @@ DISCLAIMER = (
 
 
 # ---------------------------------------------------------------------------
+# Document text extraction (server-side, lightweight)
+# Maverick handles all the heavy reasoning — we just need raw text.
+# ---------------------------------------------------------------------------
+
+# MIME types for images supported by Maverick vision API
+_IMAGE_EXTS = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp", "gif": "image/gif"}
+_TEXT_EXTS = {"pdf", "docx", "doc", "txt", "md", "text", "rst"}
+
+
+def _extract_text_pdf(file_bytes: bytes) -> tuple[str, int]:
+    """Extract text from PDF bytes using pypdf. Returns (text, page_count)."""
+    try:
+        import pypdf  # type: ignore
+        reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+        pages = []
+        for page in reader.pages:
+            text = page.extract_text() or ""
+            if text.strip():
+                pages.append(text.strip())
+        return "\n\n".join(pages), len(reader.pages)
+    except ImportError:
+        raise RuntimeError("pypdf not installed. Run: pip install pypdf")
+    except Exception as e:
+        raise RuntimeError(f"PDF extraction failed: {e}")
+
+
+def _extract_text_docx(file_bytes: bytes) -> tuple[str, int]:
+    """Extract text from DOCX bytes using python-docx."""
+    try:
+        import docx  # type: ignore
+        doc = docx.Document(io.BytesIO(file_bytes))
+        paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+        text = "\n\n".join(paragraphs)
+        word_count = len(text.split())
+        page_count = max(1, round(word_count / 500))
+        return text, page_count
+    except ImportError:
+        raise RuntimeError("python-docx not installed. Run: pip install python-docx")
+    except Exception as e:
+        raise RuntimeError(f"DOCX extraction failed: {e}")
+
+
+def _extract_text_plain(file_bytes: bytes) -> tuple[str, int]:
+    """Extract text from plain text / markdown files."""
+    try:
+        text = file_bytes.decode("utf-8", errors="replace").strip()
+    except Exception:
+        text = file_bytes.decode("latin-1", errors="replace").strip()
+    word_count = len(text.split())
+    page_count = max(1, round(word_count / 500))
+    return text, page_count
+
+
+def _extract_document(filename: str, file_bytes: bytes) -> tuple[str, int]:
+    """Dispatch to the right extractor based on file extension."""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext == "pdf":
+        return _extract_text_pdf(file_bytes)
+    elif ext in ("docx", "doc"):
+        return _extract_text_docx(file_bytes)
+    elif ext in ("txt", "md", "text", "rst"):
+        return _extract_text_plain(file_bytes)
+    else:
+        raise ValueError(f"Unsupported file type: .{ext}. Supported: PDF, DOCX, TXT, MD, PNG, JPG, WEBP")
+
+
+# ---------------------------------------------------------------------------
 # System Prompt
 # ---------------------------------------------------------------------------
 
@@ -98,8 +174,9 @@ INSTRUCTIONS:
    (b) Relevant Precedents (case name, facts, ruling, and relevance — explained clearly)
    (c) Legal Analysis (connecting law + cases to the user's situation)
    (d) Conclusion / Recommendation
-6. If the user asks a follow-up question, use the conversation history to maintain context.
-7. Always end with a brief disclaimer that this is AI-generated legal research.
+6. If the user provides DOCUMENT CONTEXT below, analyze it alongside the law and precedents.
+7. If the user asks a follow-up question, use the conversation history to maintain context.
+8. Always end with a brief disclaimer that this is AI-generated legal research.
 
 Respond in English. Be thorough but structured. Explain cases so a layperson can understand."""
 
@@ -143,7 +220,7 @@ def get_runtime() -> RAGRuntime:
 # Citation formatters
 # ---------------------------------------------------------------------------
 
-def _format_law_citations(chunks_df) -> str:
+def _format_law_citations(chunks_df) -> list:
     lines: list[str] = []
     for _, row in chunks_df.iterrows():
         title = row.get("title") or ""
@@ -178,6 +255,7 @@ def _rag_answer_with_cases(
     court_filter: str,
     argument_style: str,
     chat_history: list | None = None,
+    doc_ids: list | None = None,
 ) -> dict:
     rt = get_runtime()
     rt.load()
@@ -207,16 +285,50 @@ def _rag_answer_with_cases(
 
     cases_context = build_cases_context(live_cases)
 
+    # --- Uploaded Document Context (via Maverick) ---
+    # Text docs: injected as text blocks into the prompt
+    # Image docs: injected as base64 vision parts in the final user message
+    doc_context = ""
+    image_doc_parts: list[dict] = []  # multimodal vision content items
+    if doc_ids:
+        text_parts = []
+        for doc_id in doc_ids:
+            doc = _DOC_STORE.get(doc_id)
+            if not doc:
+                continue
+            if doc.get("is_image"):
+                # Maverick vision: send base64 image directly
+                mime = doc["mime_type"]
+                b64 = doc["b64"]
+                image_doc_parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime};base64,{b64}"},
+                })
+                text_parts.append(f"--- IMAGE DOCUMENT: {doc['filename']} (attached above for visual analysis) ---")
+            else:
+                truncated = doc["text"][:6000]
+                if len(doc["text"]) > 6000:
+                    truncated += "\n\n[... document truncated for context limit ...]"
+                text_parts.append(
+                    f"--- DOCUMENT: {doc['filename']} ---\n{truncated}\n--- END DOCUMENT ---"
+                )
+        if text_parts:
+            doc_context = "\n\n".join(text_parts)
+
     # --- Build LLM prompt with full history ---
     system_prompt = _build_system_prompt(argument_style, court_filter)
 
-    user_content = f"""RELEVANT LAW SECTIONS (BNS / Constitution / Statutes):
-{law_context}
+    # Compose user content block
+    content_parts = []
+    if law_context:
+        content_parts.append(f"RELEVANT LAW SECTIONS (BNS / Constitution / Statutes):\n{law_context}")
+    if cases_context:
+        content_parts.append(f"PRECEDENT COURT CASES:\n{cases_context}")
+    if doc_context:
+        content_parts.append(f"UPLOADED DOCUMENT CONTEXT (analyze alongside law and precedents):\n{doc_context}")
+    content_parts.append(f"USER QUERY: {q}")
 
-PRECEDENT COURT CASES:
-{cases_context}
-
-USER QUERY: {q}"""
+    user_content = "\n\n".join(content_parts)
 
     messages = [{"role": "system", "content": system_prompt}]
 
@@ -228,7 +340,16 @@ USER QUERY: {q}"""
             elif turn.get("role") == "assistant":
                 messages.append({"role": "assistant", "content": turn["content"]})
 
-    messages.append({"role": "user", "content": user_content})
+    # If there are image docs, use multimodal content format for the final user message
+    if image_doc_parts:
+        final_user_content: list[dict] | str = [
+            {"type": "text", "text": user_content},
+            *image_doc_parts,
+        ]
+    else:
+        final_user_content = user_content
+
+    messages.append({"role": "user", "content": final_user_content})
 
     raw = chat_completions(messages, max_tokens=4096, temperature=0.2)
     assistant_text = extract_assistant_text(raw)
@@ -258,6 +379,19 @@ def serve_static(filename):
     return send_from_directory(str(Path(__file__).parent / "static"), filename)
 
 
+# React Router: serve index.html for all non-API routes (SPA fallback)
+@app.route("/<path:path>")
+def spa_fallback(path):
+    if path.startswith("api/"):
+        from flask import abort
+        abort(404)
+    static_dir = str(Path(__file__).parent / "static")
+    static_file = Path(static_dir) / path
+    if static_file.is_file():
+        return send_from_directory(static_dir, path)
+    return send_from_directory(static_dir, "index.html")
+
+
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
     data = request.get_json()
@@ -265,16 +399,106 @@ def api_chat():
     court = data.get("court", "all")
     style = data.get("style", "neutral")
     history = data.get("history", [])
+    doc_ids = data.get("doc_ids", [])
 
     if not query:
         return jsonify({"error": "Please enter a legal question."}), 400
 
     try:
-        result = _rag_answer_with_cases(query, court, style, history)
+        result = _rag_answer_with_cases(query, court, style, history, doc_ids)
         return jsonify(result)
     except Exception as e:
         logger.exception("api_chat error")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/upload", methods=["POST"])
+def api_upload():
+    """Accept a document, extract text server-side, store for Maverick injection."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files["file"]
+    if not file.filename:
+        return jsonify({"error": "Empty filename"}), 400
+
+    try:
+        file_bytes = file.read()
+        if len(file_bytes) > 10 * 1024 * 1024:  # 10 MB limit
+            return jsonify({"error": "File too large. Maximum size is 10 MB."}), 413
+
+        ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+        doc_id = str(uuid.uuid4())
+
+        if ext in _IMAGE_EXTS:
+            # ---- Image: store as base64 → Maverick processes it natively via vision API ----
+            import base64 as _b64
+            b64_str = _b64.b64encode(file_bytes).decode("ascii")
+            mime = _IMAGE_EXTS[ext]
+            _DOC_STORE[doc_id] = {
+                "filename": file.filename,
+                "is_image": True,
+                "b64": b64_str,
+                "mime_type": mime,
+                "page_count": 1,
+                "text": "",  # No text extraction — Maverick sees it directly
+            }
+            preview = f"Image file — Maverick will analyze visually ({len(file_bytes)//1024} KB)"
+            page_count = 1
+            logger.info("Uploaded image: %s (%s, doc_id=%s)", file.filename, mime, doc_id)
+        else:
+            # ---- Text/PDF/DOCX: extract text ----
+            text, page_count = _extract_document(file.filename, file_bytes)
+            if not text.strip():
+                return jsonify({"error": "Could not extract text from this file. It may be a scanned image — try uploading it as PNG/JPG for Maverick vision analysis."}), 422
+            _DOC_STORE[doc_id] = {
+                "filename": file.filename,
+                "is_image": False,
+                "text": text,
+                "page_count": page_count,
+            }
+            preview = text.strip()[:150].replace("\n", " ")
+            logger.info("Uploaded doc: %s (%d pages, doc_id=%s)", file.filename, page_count, doc_id)
+
+        return jsonify({
+            "doc_id": doc_id,
+            "filename": file.filename,
+            "page_count": page_count,
+            "preview": preview,
+            "is_image": ext in _IMAGE_EXTS,
+        })
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        logger.exception("api_upload error")
+        return jsonify({"error": f"Upload processing failed: {e}"}), 500
+
+
+@app.route("/api/documents", methods=["GET"])
+def api_documents():
+    """List currently stored documents (metadata only, no text)."""
+    docs = [
+        {
+            "doc_id": doc_id,
+            "filename": info["filename"],
+            "page_count": info["page_count"],
+            "char_count": len(info["text"]),
+        }
+        for doc_id, info in _DOC_STORE.items()
+    ]
+    return jsonify(docs)
+
+
+@app.route("/api/documents/<doc_id>", methods=["DELETE"])
+def api_delete_document(doc_id):
+    """Remove a document from the store."""
+    if doc_id in _DOC_STORE:
+        del _DOC_STORE[doc_id]
+        return jsonify({"status": "deleted", "doc_id": doc_id})
+    return jsonify({"error": "Document not found"}), 404
 
 
 @app.route("/api/topics", methods=["GET"])
@@ -284,7 +508,12 @@ def api_topics():
 
 @app.route("/api/health", methods=["GET"])
 def api_health():
-    return jsonify({"status": "ok", "app": "NyaaAIk"})
+    return jsonify({
+        "status": "ok",
+        "app": "NyaaAIk",
+        "docs_stored": len(_DOC_STORE),
+        "model": os.environ.get("LLM_MODEL", "unknown"),
+    })
 
 
 # ---------------------------------------------------------------------------

@@ -33,6 +33,7 @@ llm_openai = [
 # Pin huggingface_hub with Gradio 4.44 — matches Databricks template; avoids HfFolder drift when sentence-transformers upgrades hub.
 app = [
   "flask>=3.0.0",
+  "PyPDF2>=3.0.0",
 ]
 
 [tool.pytest.ini_options]

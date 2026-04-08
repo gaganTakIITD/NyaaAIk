@@ -15,3 +15,9 @@ build/
 # Local AI Dev Kit / Cursor (reinstall via README; do not vendor skills)
 .cursor/skills/
 .ai-dev-kit/
+
+# Frontend — exclude node_modules but KEEP app/static/ (pre-built for Databricks Apps)
+frontend/node_modules/
+frontend/.vite/
+# NOTE: app/static/ is intentionally NOT ignored — it contains the React build
+# that Databricks Apps serves. Always run `cd frontend && npm run build` before committing.
