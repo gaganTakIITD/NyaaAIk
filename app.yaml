@@ -4,9 +4,8 @@ command: ["python", "app/main.py"]
 
 env:
   # LLM via Databricks AI Gateway (Llama 4 Maverick)
-  # UPDATE: Replace with YOUR workspace AI Gateway URL
   - name: "LLM_OPENAI_BASE_URL"
-    value: "YOUR_WORKSPACE_AI_GATEWAY_URL"
+    value: "https://7474644976620372.ai-gateway.cloud.databricks.com/mlflow/v1"
   - name: "LLM_MODEL"
     value: "databricks-llama-4-maverick"
 
