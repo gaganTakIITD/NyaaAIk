@@ -99,21 +99,26 @@ def _build_system_prompt(argument_style: str, court_filter: str) -> str:
 
     return f"""You are NyaaAIk, an AI legal research assistant for Indian advocates and legal professionals.
 
-ROLE: Provide detailed legal analysis with proper case citations and statutory references.
+ROLE: Provide detailed legal analysis with proper case citations, explanations, and statutory references.
 
 INSTRUCTIONS:
 1. APPLICABLE LAW: Cite specific BNS (Bharatiya Nyaya Sanhita 2023) sections. If relevant, mention the corresponding old IPC sections for reference since many precedents cite IPC.
-2. PRECEDENT CASES: Reference the court cases provided in context with proper citations (Case Name, Court, Year). Quote key observations from judgments when available.
+2. PRECEDENT CASES — Do NOT just cite case names. For each case:
+   - State the FACTS briefly (what happened)
+   - State the RULING (what the court decided)
+   - Explain WHY it is relevant to the user's query
+   - Include the court name, year, and link if available
 3. ARGUMENT STYLE: {style_instruction}
 4. COURT PREFERENCE: {court_instruction}
 5. STRUCTURE your response as:
-   (a) Applicable Legal Provisions (BNS/IPC sections)
-   (b) Relevant Precedents (case citations with key holdings)
-   (c) Legal Analysis
+   (a) Applicable Legal Provisions (BNS/IPC sections with brief explanation)
+   (b) Relevant Precedents (case name, facts, ruling, and relevance — explained clearly)
+   (c) Legal Analysis (connecting law + cases to the user's situation)
    (d) Conclusion / Recommendation
-6. Always end with a brief disclaimer that this is AI-generated legal research.
+6. If the user asks a follow-up question, use the conversation history to maintain context. Don't repeat information already given unless asked.
+7. Always end with a brief disclaimer that this is AI-generated legal research.
 
-Respond in English. Be thorough but structured."""
+Respond in English. Be thorough but structured. Explain cases so a layperson can understand."""
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +202,7 @@ def _rag_answer_with_cases(
     query: str,
     court_filter: str,
     argument_style: str,
+    chat_history: list | None = None,
 ) -> tuple[str, str, str]:
     """Full pipeline: RAG (Chunk Set 1) + Live Cases + LLM answer.
 
@@ -248,10 +254,20 @@ PRECEDENT COURT CASES:
 
 USER QUERY: {q}"""
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_content},
-    ]
+    # Build messages with conversation history for multi-turn
+    messages = [{"role": "system", "content": system_prompt}]
+
+    # Add previous turns for context (last 3 exchanges)
+    if chat_history:
+        for prev_user, prev_bot in chat_history[-3:]:
+            if prev_user:
+                messages.append({"role": "user", "content": prev_user})
+            if prev_bot:
+                # Strip the sources/disclaimer block from previous responses
+                clean_bot = prev_bot.split("\n---\n**Statutory Sources**")[0].strip()
+                messages.append({"role": "assistant", "content": clean_bot})
+
+    messages.append({"role": "user", "content": user_content})
 
     raw = chat_completions(messages, max_tokens=3072, temperature=0.2)
     assistant_text = extract_assistant_text(raw)
@@ -281,7 +297,7 @@ def run_turn(
 
     try:
         assistant_text, law_cites, case_cites = _rag_answer_with_cases(
-            q, court_filter, argument_style,
+            q, court_filter, argument_style, history
         )
 
         sources_block = (
