@@ -240,6 +240,46 @@ Before running any notebook, ensure:
 
 ---
 
+### ⚠️ First-Time Workspace Setup — If You Get `catalog 'main' not found`
+
+This error means either:
+- Unity Catalog is not fully configured in your workspace, **or**
+- The `main` catalog doesn't exist yet, **or**
+- You are on a trial workspace that uses a different default catalog name
+
+**Fix Option A — Create the catalog and schema manually (recommended):**
+
+Open any Databricks notebook, attach to a cluster, and run this **before** Notebook 1:
+
+```sql
+-- Run this in a SQL cell or notebook
+CREATE CATALOG IF NOT EXISTS main;
+CREATE SCHEMA  IF NOT EXISTS main.india_legal;
+CREATE VOLUME  IF NOT EXISTS main.india_legal.legal_files;
+```
+
+Or via the UI: **Catalog → + Add → Add a catalog** → name it `main` → Create.
+
+**Fix Option B — Use your own catalog name:**
+
+If your workspace has a different catalog (e.g. `hive_metastore` or a custom one), open Notebook 1 and **edit Step 1** to change:
+
+```python
+CATALOG  = 'main'        # ← change to your catalog name, e.g. 'hive_metastore'
+SCHEMA   = 'india_legal' # ← keep as-is or rename
+VOLUME   = 'legal_files' # ← keep as-is or rename
+```
+
+> ⚠️ If you change `CATALOG`, also update `app.yaml` and `setup_vector_search.py` to use the same name consistently.
+
+**Verify Unity Catalog is active:**
+```sql
+SHOW CATALOGS;
+-- Should list 'main' and your workspace catalog
+```
+
+---
+
 ### NOTEBOOK 1 — Data Ingestion
 
 **File:** `notebooks/india_legal_policy_ingest.ipynb`
@@ -251,7 +291,7 @@ Open this notebook in your Databricks workspace. Run **each cell in order**:
 | **Step 0** | Installs Python packages: `requests`, `pandas`, `beautifulsoup4`, `lxml`, `openpyxl`, `pymupdf` |
 | **Step 1** | Reads secrets from `nyaya-dhwani` scope. Sets `CATALOG=main`, `SCHEMA=india_legal`, `VOLUME=legal_files` |
 | **Step 1b** *(optional)* | Pings Sarvam API with a test message to confirm the key works |
-| **Step 2** | Creates `main.india_legal` database and `legal_files` Volume in Unity Catalog |
+| **Step 2** | Creates `main.india_legal` schema and `legal_files` Volume. **If you get `catalog not found`** — run the [First-Time Setup](#️-first-time-workspace-setup--if-you-get-catalog-main-not-found) SQL above first, or change `CATALOG` in Step 1 |
 | **Step 3** | Loads BNS sections — tries Volume CSV first, then GitHub mirrors, then PDF fallback |
 | **Step 3a** | GitHub mirror fallback (only runs if Step 3 Volume CSV is missing) |
 | **Step 3b** | PDF + `ai_parse_document` + Sarvam enrichment (only if CSV and mirrors both fail) |
@@ -678,6 +718,9 @@ git push origin main
 
 | Error | Cause | Fix |
 |---|---|---|
+| `catalog 'main' not found` | `main` catalog doesn't exist in this workspace | Run `CREATE CATALOG IF NOT EXISTS main;` in a SQL notebook first, or change `CATALOG = 'main'` in Notebook 1 Step 1 |
+| `schema 'main.india_legal' not found` | Schema not created yet | Run Step 2 of Notebook 1, or `CREATE SCHEMA IF NOT EXISTS main.india_legal;` manually |
+| `volume 'legal_files' not found` | Volume not created yet | Run Step 2 of Notebook 1, or `CREATE VOLUME IF NOT EXISTS main.india_legal.legal_files;` manually |
 | `Unexpected token '<'` | API returned HTML instead of JSON | Check app logs for Python errors |
 | `Sarvam STT: NOT configured` | Key not loaded | Re-check secret scope + app resources |
 | `Indian Kanoon: NOT configured` | Same | Same |
