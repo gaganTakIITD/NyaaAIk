@@ -15,7 +15,7 @@ export default function ChatWindow({ messages, isLoading, error, onClearError, o
   return (
     <main className="chat-window" id="chatWindow" aria-label="Conversation" aria-live="polite">
       {isEmpty && !isLoading ? (
-        <WelcomeScreen onSelect={onSuggestionSelect} />
+        <WelcomeScreen onPrefill={onSuggestionSelect} />
       ) : (
         <>
           {messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
