@@ -1,10 +1,10 @@
 /* ============================================================
-   NyaaAIk — Gemini-Inspired Clean Dark UI
+   NyaaAIk — Gemini-Inspired UI  |  Dark + Light themes
    ============================================================ */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* ========== DARK THEME (default) ========== */
 :root {
-  /* Gemini-style palette — dark mode */
   --bg: #131314;
   --bg-sidebar: #1e1f20;
   --bg-surface: #1e1f20;
@@ -13,50 +13,78 @@
   --bg-active: #2d2e30;
   --bg-elevated: #242526;
 
-  /* Borders */
   --border: rgba(255, 255, 255, 0.1);
   --border-hover: rgba(255, 255, 255, 0.18);
-  --border-focus: #a8c7fa;
 
-  /* Text */
   --text-primary: #e3e3e3;
   --text-secondary: #9aa0a6;
   --text-tertiary: #6f7780;
   --text-disabled: #444648;
 
-  /* Accent — Google blue (Gemini-style) */
-  --accent: #a8c7fa;
-  --accent-hover: #c2d8fb;
-  --accent-dim: rgba(168, 199, 250, 0.12);
-  --accent-gradient: linear-gradient(135deg, #a8c7fa 0%, #c2a8fa 100%);
+  /* Pure Google Blue — no purple */
+  --accent: #4dabf7;
+  --accent-hover: #74c0fc;
+  --accent-dim: rgba(77, 171, 247, 0.12);
+  --accent-gradient: linear-gradient(135deg, #4dabf7 0%, #74c0fc 100%);
+  --accent-on: #0d1b2a;
 
-  /* Semantic */
   --success: #81c995;
   --success-dim: rgba(129, 201, 149, 0.1);
   --error: #f28b82;
   --error-dim: rgba(242, 139, 130, 0.12);
   --warning: #fdd663;
 
-  /* User msg */
   --user-bg: #282a2c;
   --user-border: rgba(255, 255, 255, 0.08);
 
-  /* Geometry */
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 18px;
   --radius-xl: 24px;
   --radius-full: 9999px;
 
-  /* Shadow — minimal */
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
-
-  /* Timing */
   --ease: cubic-bezier(0.2, 0, 0, 1);
-
-  /* Layout */
   --sidebar-w: 270px;
+}
+
+/* ========== LIGHT THEME ========== */
+[data-theme="light"] {
+  --bg: #ffffff;
+  --bg-sidebar: #f8f9fa;
+  --bg-surface: #f8f9fa;
+  --bg-input: #f1f3f4;
+  --bg-hover: #f1f3f4;
+  --bg-active: #e8f0fe;
+  --bg-elevated: #ffffff;
+
+  --border: rgba(0, 0, 0, 0.1);
+  --border-hover: rgba(0, 0, 0, 0.2);
+
+  --text-primary: #202124;
+  --text-secondary: #5f6368;
+  --text-tertiary: #80868b;
+  --text-disabled: #bdc1c6;
+
+  /* Pure Google Blue — light mode */
+  --accent: #1a73e8;
+  --accent-hover: #1967d2;
+  --accent-dim: rgba(26, 115, 232, 0.1);
+  --accent-gradient: linear-gradient(135deg, #1a73e8 0%, #1967d2 100%);
+  --accent-on: #ffffff;
+
+  --success: #188038;
+  --success-dim: rgba(24, 128, 56, 0.08);
+  --error: #d93025;
+  --error-dim: rgba(217, 48, 37, 0.08);
+  --warning: #f29900;
+
+  --user-bg: #e8f0fe;
+  --user-border: rgba(26, 115, 232, 0.15);
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.12);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.15);
 }
 
 html { height: 100%; }
@@ -68,13 +96,14 @@ body {
   height: 100vh;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease);
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
 
 ::selection { background: var(--accent-dim); color: var(--text-primary); }
 
@@ -300,6 +329,21 @@ body {
 }
 
 .topbar-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* Theme toggle */
+.theme-toggle-btn {
+  width: 34px; height: 34px;
+  border-radius: var(--radius-md);
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; flex-shrink: 0;
+}
+.theme-toggle-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
 
 .status-pill {
   display: flex; align-items: center; gap: 5px;

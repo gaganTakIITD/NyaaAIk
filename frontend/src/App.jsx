@@ -10,8 +10,17 @@ import { useDocuments } from './hooks/useDocuments.js'
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  // Lifted input text — allows topic chips and suggestion cards to pre-fill without sending
   const [inputText, setInputText] = useState('')
+
+  // Theme — persisted to localStorage, applied to <html data-theme>
+  const [theme, setTheme] = useState(() => localStorage.getItem('nyaaaik_theme') || 'dark')
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('nyaaaik_theme', theme)
+  }, [theme])
+
+  const toggleTheme = useCallback(() => setTheme(t => t === 'dark' ? 'light' : 'dark'), [])
 
   const {
     conversations, activeConversation, activeId,
@@ -66,6 +75,8 @@ export default function App() {
           msgCount={activeConversation?.messages?.length || 0}
           onToggleSidebar={() => setSidebarOpen(v => !v)}
           sidebarOpen={sidebarOpen}
+          theme={theme}
+          onToggleTheme={toggleTheme}
         />
         <ControlsBar
           court={court} setCourt={setCourt}
