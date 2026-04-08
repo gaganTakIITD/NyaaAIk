@@ -11,7 +11,14 @@ import { useDocuments } from './hooks/useDocuments.js'
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [inputText, setInputText] = useState('')
-  const [persona, setPersona] = useState('advocate')  // managed here, never stale
+  const [persona, setPersona] = useState(
+    () => localStorage.getItem('nyaaaik_persona') || 'advocate'
+  )
+
+  // Persist persona selection across page refreshes
+  useEffect(() => {
+    localStorage.setItem('nyaaaik_persona', persona)
+  }, [persona])
 
   // Theme — persisted to localStorage, applied to <html data-theme>
   const [theme, setTheme] = useState(() => localStorage.getItem('nyaaaik_theme') || 'dark')
