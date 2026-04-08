@@ -464,7 +464,7 @@ def api_chat():
 @app.route("/api/transcribe", methods=["POST"])
 def api_transcribe():
     """Receive audio blob from browser MediaRecorder → Sarvam Saaras v3 STT → transcript."""
-    from src.nyaya_dhwani.sarvam_client import is_configured, speech_to_text_file, transcript_from_stt_response
+    from nyaya_dhwani.sarvam_client import is_configured, speech_to_text_file, transcript_from_stt_response
 
     if not is_configured():
         return jsonify({"error": "SARVAM_API_KEY is not configured on this server."}), 503
