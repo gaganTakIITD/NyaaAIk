@@ -1,16 +1,14 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import UploadModal from './UploadModal.jsx'
 import { IconSend, IconAttach, IconFile, IconImage } from '../utils/icons.jsx'
-import { useVoiceInput } from '../hooks/useVoiceInput.js'
+import { useSarvamVoice, SARVAM_LANGUAGES } from '../hooks/useSarvamVoice.js'
 
 function isImageDoc(filename = '') {
   return /\.(png|jpg|jpeg|webp|gif)$/i.test(filename)
 }
 
-// Mic icon SVG
 function MicIcon({ size = 16, recording = false, ...p }) {
   if (recording) {
-    // Waveform / stop icon when recording
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" {...p}>
         <rect x="6" y="6" width="12" height="12" rx="2" />
@@ -27,6 +25,19 @@ function MicIcon({ size = 16, recording = false, ...p }) {
   )
 }
 
+function SpinnerIcon({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+      style={{ animation: 'spin 0.9s linear infinite' }}>
+      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+    </svg>
+  )
+}
+
+function formatDuration(s) {
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
 export default function InputBar({
   onSend, disabled,
   documents, activeDocIds, onUpload, onRemoveDoc, onToggleDoc, isUploading,
@@ -34,39 +45,32 @@ export default function InputBar({
 }) {
   const [showUpload, setShowUpload] = useState(false)
   const [pasteNotice, setPasteNotice] = useState('')
+  const [voiceLang, setVoiceLang] = useState('hi-IN')
+  const [showLangPicker, setShowLangPicker] = useState(false)
   const textareaRef = useRef(null)
 
-  // Voice input — transcribed text merges into textarea
-  const { isListening, isSupported, interimText, startListening, stopListening, error: voiceError } = useVoiceInput({
-    onTranscript: (text) => {
-      onChange(text)
-    },
-    lang: 'en-IN',
-  })
+  const { isRecording, isTranscribing, isSupported, duration, error: voiceError, toggleRecording } =
+    useSarvamVoice({
+      onTranscript: (text) => onChange(prev => (prev ? prev + ' ' + text : text)),
+      language: voiceLang,
+    })
 
-  // When interimText arrives, show it as a ghost suffix in the textarea
-  const displayValue = isListening && interimText
-    ? (value || '') + interimText
-    : (value || '')
-
-  // Auto-resize
   useEffect(() => {
     const ta = textareaRef.current
     if (ta) {
       ta.style.height = 'auto'
       ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
-      if (value && !isListening) ta.focus()
+      if (value && !isRecording) ta.focus()
     }
-  }, [value, isListening])
+  }, [value, isRecording])
 
   const handleSend = useCallback(() => {
-    if (isListening) stopListening()
     const t = (value || '').trim()
     if (!t || disabled) return
     onSend(t)
     onChange('')
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
-  }, [value, disabled, onSend, onChange, isListening, stopListening])
+  }, [value, disabled, onSend, onChange])
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
@@ -78,7 +82,6 @@ export default function InputBar({
     if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 160) + 'px' }
   }, [onChange])
 
-  // Ctrl+V paste — intercept image from clipboard
   const handlePaste = useCallback(async (e) => {
     const items = e.clipboardData?.items
     if (!items) return
@@ -103,31 +106,27 @@ export default function InputBar({
     }
   }, [onUpload])
 
-  const toggleMic = useCallback(() => {
-    if (isListening) stopListening()
-    else startListening()
-  }, [isListening, startListening, stopListening])
-
+  const currentLang = SARVAM_LANGUAGES.find(l => l.code === voiceLang)
   const activeDocs = documents.filter(d => activeDocIds.includes(d.id) && d.status === 'ok')
   const hasUploadedDocs = documents.some(d => d.status === 'ok')
 
   return (
     <div className="input-section">
-      {/* Recording banner */}
-      {isListening && (
+      {/* Sarvam recording banner */}
+      {isRecording && (
         <div className="voice-banner" role="status" aria-live="polite">
           <span className="voice-banner-dot" aria-hidden="true" />
-          <span>Listening — speak your case in English or Hindi-English mix</span>
-          {interimText && (
-            <span className="voice-interim" aria-live="polite"> &ldquo;{interimText}&rdquo;</span>
-          )}
-          <button
-            className="voice-banner-stop"
-            onClick={stopListening}
-            aria-label="Stop recording"
-          >
-            Stop
-          </button>
+          <span>Recording in <strong>{currentLang?.label}</strong> — {formatDuration(duration)}</span>
+          <span style={{ flex: 1 }} />
+          <button className="voice-banner-stop" onClick={toggleRecording}>Stop</button>
+        </div>
+      )}
+
+      {/* Transcribing indicator */}
+      {isTranscribing && (
+        <div className="voice-banner" style={{ borderColor: 'rgba(168,199,250,0.25)', background: 'var(--accent-dim)', color: 'var(--accent)' }} role="status">
+          <SpinnerIcon size={13} />
+          <span>Sarvam Saaras is transcribing your audio…</span>
         </div>
       )}
 
@@ -174,34 +173,68 @@ export default function InputBar({
         </div>
       )}
 
-      <div className={`input-wrap${isListening ? ' recording' : ''}`} id="inputContainer">
+      <div className={`input-wrap${isRecording ? ' recording' : ''}`} id="inputContainer">
         <textarea
           ref={textareaRef}
           className="input-textarea"
           id="queryInput"
-          placeholder={isListening ? 'Speak now…' : 'Ask a legal question, speak with microphone, or paste a screenshot (Ctrl+V)'}
-          value={displayValue}
+          placeholder={
+            isRecording ? `Speak in ${currentLang?.label}…` :
+            isTranscribing ? 'Transcribing with Sarvam…' :
+            'Ask a legal question, use mic for voice, or paste a screenshot (Ctrl+V)'
+          }
+          value={value || ''}
           onInput={handleInput}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          disabled={disabled}
+          disabled={disabled || isTranscribing}
           rows={1}
           aria-label="Legal query"
-          aria-describedby={isListening ? 'voiceBanner' : undefined}
         />
         <div className="input-btns">
+          {/* Language picker for voice */}
+          {isSupported && (
+            <div style={{ position: 'relative' }}>
+              <button
+                className="lang-btn"
+                onClick={() => setShowLangPicker(v => !v)}
+                title="Select voice language"
+                aria-label="Voice language"
+                id="langBtn"
+                disabled={isRecording || isTranscribing}
+              >
+                {currentLang?.code.split('-')[0].toUpperCase()}
+              </button>
+              {showLangPicker && (
+                <div className="lang-dropdown" role="listbox" aria-label="Select voice language">
+                  {SARVAM_LANGUAGES.map(l => (
+                    <button
+                      key={l.code}
+                      role="option"
+                      aria-selected={l.code === voiceLang}
+                      className={`lang-option${l.code === voiceLang ? ' selected' : ''}`}
+                      onClick={() => { setVoiceLang(l.code); setShowLangPicker(false) }}
+                    >
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Mic button */}
           {isSupported && (
             <button
-              className={`mic-btn${isListening ? ' recording' : ''}`}
-              onClick={toggleMic}
-              title={isListening ? 'Stop recording (click to stop)' : 'Start voice input'}
-              aria-label={isListening ? 'Stop recording' : 'Start voice input'}
+              className={`mic-btn${isRecording ? ' recording' : ''}${isTranscribing ? ' transcribing' : ''}`}
+              onClick={toggleRecording}
+              title={isRecording ? 'Stop recording' : `Record in ${currentLang?.label} (Sarvam)`}
+              aria-label={isRecording ? 'Stop recording' : 'Start voice input'}
               id="micBtn"
-              disabled={disabled && !isListening}
+              disabled={(disabled && !isRecording) || isTranscribing}
             >
-              <MicIcon size={15} recording={isListening} />
+              {isTranscribing ? <SpinnerIcon size={14} /> : <MicIcon size={15} recording={isRecording} />}
             </button>
           )}
 
@@ -209,7 +242,7 @@ export default function InputBar({
           <button
             className={`attach-btn${hasUploadedDocs ? ' has-docs' : ''}`}
             onClick={() => setShowUpload(true)}
-            title="Upload document or image (or paste screenshot Ctrl+V)"
+            title="Upload document or image (Ctrl+V paste also works)"
             aria-label="Upload document"
             id="uploadBtn"
             disabled={isUploading}
@@ -221,7 +254,7 @@ export default function InputBar({
           <button
             className="send-btn"
             onClick={handleSend}
-            disabled={disabled || !(value || '').trim()}
+            disabled={disabled || !(value || '').trim() || isTranscribing}
             id="sendBtn"
             title="Send (Enter)"
             aria-label="Send"
@@ -233,8 +266,8 @@ export default function InputBar({
 
       <div className="input-hint">
         <span>
-          <kbd>Enter</kbd> send · <kbd>Shift+Enter</kbd> new line · <kbd>Ctrl+V</kbd> paste image
-          {isSupported && ' · Mic for voice'}
+          <kbd>Enter</kbd> send · <kbd>Shift+Enter</kbd> new line · <kbd>Ctrl+V</kbd> paste
+          {isSupported && ' · Mic for Indian voice (Sarvam)'}
         </span>
         <span>Maverick RAG · BNS + Indian Kanoon</span>
       </div>

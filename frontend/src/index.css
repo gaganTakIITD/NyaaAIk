@@ -900,3 +900,64 @@ body {
   border-color: var(--error);
 }
 
+/* ==================== LANGUAGE PICKER ==================== */
+.lang-btn {
+  height: 36px; padding: 0 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 0.67rem; font-weight: 700; font-family: inherit;
+  letter-spacing: 0.5px;
+  cursor: pointer; transition: all 0.15s;
+  white-space: nowrap;
+}
+.lang-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+  color: var(--accent);
+}
+.lang-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.lang-dropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  z-index: 200;
+  min-width: 120px;
+  box-shadow: var(--shadow-md);
+  animation: fadeDown 0.15s var(--ease);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.lang-option {
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  background: transparent; border: none;
+  color: var(--text-secondary);
+  font-size: 0.78rem; font-family: inherit;
+  text-align: left; cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.lang-option:hover { background: var(--bg-hover); color: var(--text-primary); }
+.lang-option.selected { color: var(--accent); font-weight: 600; background: var(--accent-dim); }
+
+/* Transcribing state for mic button */
+.mic-btn.transcribing {
+  border-color: rgba(168,199,250,0.4);
+  color: var(--accent);
+  background: var(--accent-dim);
+  cursor: wait;
+}
+
+/* Spin animation for transcribing spinner */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+

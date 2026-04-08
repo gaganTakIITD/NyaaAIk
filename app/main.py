@@ -445,6 +445,41 @@ def api_chat():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/transcribe", methods=["POST"])
+def api_transcribe():
+    """Receive audio blob from browser MediaRecorder → Sarvam Saaras v3 STT → transcript."""
+    from src.nyaya_dhwani.sarvam_client import is_configured, speech_to_text_file, transcript_from_stt_response
+
+    if not is_configured():
+        return jsonify({"error": "SARVAM_API_KEY is not configured on this server."}), 503
+
+    if "audio" not in request.files:
+        return jsonify({"error": "No audio file provided"}), 400
+
+    audio_file = request.files["audio"]
+    language_code = request.form.get("language", "hi-IN")
+    audio_bytes = audio_file.read()
+
+    if len(audio_bytes) < 1000:
+        return jsonify({"error": "Audio too short — please speak for at least 1 second."}), 400
+    if len(audio_bytes) > 20 * 1024 * 1024:
+        return jsonify({"error": "Audio too large (max 20 MB)"}), 413
+
+    try:
+        # Sarvam STT: mode=transcribe keeps original language, mode=translate → English
+        resp = speech_to_text_file(
+            audio_bytes,
+            filename=audio_file.filename or "recording.webm",
+            mode="transcribe",
+            language_code=language_code,
+        )
+        transcript = transcript_from_stt_response(resp)
+        return jsonify({"transcript": transcript, "language": language_code})
+    except Exception as e:
+        logger.exception("api_transcribe error")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
     """Accept a document, extract text server-side, store for Maverick injection."""
@@ -556,6 +591,7 @@ def api_health():
 def _load_secrets_from_scope() -> None:
     mapping = {
         "INDIAN_KANOON_API_TOKEN": ("nyaya-dhwani", "indian_kanoon_api_token"),
+        "SARVAM_API_KEY":          ("nyaya-dhwani", "sarvam_api_key"),
     }
     for env_var, (scope, key) in mapping.items():
         if os.environ.get(env_var, "").strip():
@@ -586,6 +622,8 @@ def main() -> None:
 
     logger.info("Indian Kanoon API: %s",
                 "configured" if os.environ.get("INDIAN_KANOON_API_TOKEN") else "NOT configured")
+    logger.info("Sarvam STT (Saaras): %s",
+                "configured" if os.environ.get("SARVAM_API_KEY") else "NOT configured — voice input disabled")
 
     port = int(os.environ.get("PORT", os.environ.get("FLASK_RUN_PORT", "8000")))
     host = os.environ.get("FLASK_RUN_HOST", "0.0.0.0")

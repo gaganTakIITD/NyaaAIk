@@ -11,5 +11,5 @@ env:
     value: "nyaya_vs_endpoint"
   - name: NYAYA_VS_INDEX_NAME
     value: "main.india_legal.legal_rag_corpus_index"
-  - name: INDIAN_KANOON_API_TOKEN
-    value: "56c4b332055afa06411225184ba1fdf9675d947f"
+  - name: SARVAM_STT_MODEL
+    value: "saaras:v3"
